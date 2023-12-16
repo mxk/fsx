@@ -3,10 +3,8 @@ package index
 import (
 	"fmt"
 	"math"
-	"path"
 	"runtime"
 	"sort"
-	"strings"
 	"sync"
 )
 
@@ -18,14 +16,14 @@ var monolith = map[string]struct{}{
 
 // Tree is a directory tree representation of the index.
 type Tree struct {
-	dirs map[string]*Dir
+	dirs map[Path]*Dir
 	idx  map[Digest]Files
 }
 
 // ToTree creates a tree representation of the file system index.
 func (idx Index) ToTree() *Tree {
 	t := &Tree{
-		dirs: make(map[string]*Dir, len(idx.Groups)),
+		dirs: make(map[Path]*Dir, len(idx.Groups)),
 		idx:  make(map[Digest]Files, len(idx.Groups)),
 	}
 
@@ -43,33 +41,43 @@ func (idx Index) ToTree() *Tree {
 	// Replace Dir entries for monolith directories
 	var subdirs Dirs
 	for p, d := range t.dirs {
-		base := path.Base(p)
-		if _, ok := monolith[base]; !ok {
+		if _, ok := monolith[p.Base()]; !ok || p != d.Path {
 			continue
 		}
 		subdirs = d.appendSubdirs(subdirs[:0])
+		d.Dirs = nil
 		for _, sd := range subdirs {
 			if _, ok := t.dirs[sd.Path]; !ok {
 				panic(fmt.Sprint("missing directory: ", sd.Path))
 			}
 			d.Files = append(d.Files, sd.Files...)
+			sd.Dirs, sd.Files = nil, nil
 			t.dirs[sd.Path] = d
 		}
+	}
+
+	for _, d := range t.dirs {
+		sort.Slice(d.Dirs, func(i, j int) bool {
+			return d.Dirs[i].Base() < d.Dirs[j].Base()
+		})
+		sort.Slice(d.Files, func(i, j int) bool {
+			return d.Files[i].Base() < d.Files[j].Base()
+		})
 	}
 	return t
 }
 
 // addFile adds file f to the tree, creating all required directory entries.
 func (t *Tree) addFile(f *File) {
-	p := path.Dir(f.Path)
+	p := f.Dir()
 	if d, ok := t.dirs[p]; ok {
 		d.Files = append(d.Files, f)
 		return
 	}
 	dir := &Dir{Path: p, Files: Files{f}}
 	t.dirs[p] = dir
-	for dir.Path != "." {
-		p := path.Dir(dir.Path)
+	for dir.Path != Root {
+		p := dir.Dir()
 		if d, ok := t.dirs[p]; ok {
 			d.Dirs = append(d.Dirs, dir)
 			break
@@ -88,7 +96,7 @@ type Dup struct {
 
 // Dups returns all directories that contain duplicate data.
 func (t *Tree) Dups() []*Dup {
-	root, ok := t.dirs["."]
+	root, ok := t.dirs[Root]
 	if !ok || len(root.Dirs) == 0 {
 		return nil
 	}
@@ -116,12 +124,14 @@ func (t *Tree) Dups() []*Dup {
 	for {
 	submit:
 		// Process the queue in approximate depth-first order without blocking
-		// on sends. Doing it this way simplifies select block.
-		for i := len(queue) - 1; i >= 0; i = len(queue) - 1 {
+		// on sends. Doing it this way simplifies the select block when the
+		// queue is empty.
+		for i := len(queue) - 1; i >= 0; {
 			select {
 			case next <- queue[i][0]:
 				if queue[i] = queue[i][1:]; len(queue[i]) == 0 {
 					queue = queue[:i]
+					i--
 				}
 			default:
 				break submit
@@ -131,7 +141,7 @@ func (t *Tree) Dups() []*Dup {
 		case d, ok := <-dup:
 			if !ok {
 				sort.Slice(dups, func(i, j int) bool {
-					return pathLess(dups[i].Path, dups[j].Path)
+					return dups[i].less(dups[j].Path)
 				})
 				return dups
 			}
@@ -150,24 +160,23 @@ func (t *Tree) findDups(next <-chan *Dir, todo chan<- Dirs, dup chan<- *Dup, wg 
 	defer wg.Done()
 	var subtree Dirs
 	safe := make(map[Digest]bool)
-	dirs := make(map[string]int)
+	dirs := make(map[Path]int)
 next:
 	for root := range next {
-		prefix := root.Path + "/"
 		subtree = root.appendSubdirs(append(subtree[:0], root))
 		clear(safe)
 		clear(dirs)
 		for _, d := range subtree {
 			for _, f := range d.Files {
-				if strings.HasSuffix(f.Path, "/Thumbs.db") {
+				if f.Path.Base() == "Thumbs.db" {
 					continue
 				}
 				for _, dup := range t.idx[f.Digest] {
-					if strings.HasPrefix(dup.Path, prefix) {
+					if root.Contains(dup.Path) {
 						continue
 					}
 					safe[f.Digest] = true
-					dirs[path.Dir(dup.Path)]++
+					dirs[dup.Dir()]++
 				}
 				if !safe[f.Digest] {
 					todo <- root.Dirs
@@ -183,18 +192,18 @@ next:
 				if !safe[f.Digest] {
 					continue
 				}
-				bestAlt, maxRefs := "", 0
+				bestAlt, maxRefs := Root, 0
 				for _, dup := range t.idx[f.Digest] {
-					if strings.HasPrefix(dup.Path, prefix) {
+					if root.Contains(dup.Path) {
 						continue
 					}
-					alt := path.Dir(dup.Path)
+					alt := dup.Path.Dir()
 					if refs := dirs[alt]; maxRefs < refs {
 						bestAlt, maxRefs = alt, refs
 					}
 				}
 				if maxRefs < math.MaxInt {
-					if used++; bestAlt == "" {
+					if used++; bestAlt == Root {
 						panic("alt not found")
 					}
 					dirs[bestAlt] = math.MaxInt
@@ -208,7 +217,7 @@ next:
 			}
 		}
 		sort.Slice(alt, func(i, j int) bool {
-			return pathLess(alt[i].Path, alt[j].Path)
+			return alt[i].less(alt[j].Path)
 		})
 		dup <- &Dup{Dir: root, Alt: alt}
 		wg.Done()
@@ -217,7 +226,7 @@ next:
 
 // Dir is a directory in the file system.
 type Dir struct {
-	Path  string
+	Path
 	Dirs  Dirs
 	Files Files
 }
@@ -225,6 +234,8 @@ type Dir struct {
 // Dirs is an ordered list of directories.
 type Dirs []*Dir
 
+// appendSubdirs appends all direct and indirect subdirectories of d to dirs in
+// breadth-first order.
 func (d *Dir) appendSubdirs(dirs Dirs) Dirs {
 	i := len(dirs)
 	for dirs = append(dirs, d.Dirs...); i < len(dirs); i++ {

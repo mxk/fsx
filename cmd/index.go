@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"math"
@@ -85,30 +84,11 @@ func walkFS(fsys fs.FS, files chan<- *index.File) {
 // hashFiles computes the digest of each file received from paths and sends the
 // corresponding File to files.
 func hashFiles(fsys fs.FS, paths <-chan string, files chan<- *index.File) {
-	hash := index.NewHash()
-	buf := make([]byte, 1024*1024)
+	h := index.NewHasher()
 	for path := range paths {
-		f, err := fsys.Open(path)
-		if err != nil {
-			log.Printf("Failed to open file: %s (%v)", path, err)
-			continue
-		}
-		fi, err := f.Stat()
-		if err != nil {
-			log.Printf("Failed to stat file: %s (%v)", path, err)
-			continue
-		}
-		size := fi.Size()
-		hash.Reset()
-		n, err := io.CopyBuffer(hash, f, buf)
-		_ = f.Close()
-		if err != nil {
-			log.Printf("Failed to hash file: %s (%v)", path, err)
-		} else if n != size {
-			log.Printf("File size mismatch: %s (want %d, got %d)", path, size, n)
+		if f, err := h.Read(fsys, path); err != nil {
+			log.Print(err)
 		} else {
-			f := &index.File{Path: path, Size: size}
-			hash.Sum(f.Digest[:0])
 			files <- f
 		}
 	}
