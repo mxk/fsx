@@ -8,6 +8,6 @@ import (
 )
 
 func main() {
-	cli.Main.Summary = "File system hashing and deduplication tool"
+	cli.Main.Summary = "File system toolbox"
 	cli.Main.Run()
 }
