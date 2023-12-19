@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,78 +21,103 @@ type Index struct {
 	Groups []Files
 }
 
+// File is a regular file in the file system.
+type File struct {
+	Path
+	Digest Digest
+	Size   int64
+	Mod    time.Time
+}
+
+// Files is an ordered list of files.
+type Files []*File
+
+// Sort sorts files by path.
+func (fs Files) Sort() {
+	sort.Slice(fs, func(i, j int) bool { return fs[i].less(fs[j].Path) })
+}
+
 // Load loads index contents from the specified file path.
-func Load(path string) Index {
-	f, err := os.Open(path)
+func Load(name string) (Index, error) {
+	f, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		return Index{}, err
 	}
-	r := Read(f)
-	if err = f.Close(); err != nil {
-		panic(err)
+	idx, err := Read(f)
+	if err2 := f.Close(); err == nil && err2 != nil {
+		err = err2
 	}
-	return r
+	return idx, err
 }
 
 // Read reads index contents from src.
-func Read(src io.Reader) Index {
+func Read(src io.Reader) (Index, error) {
 	s := bufio.NewScanner(src)
-	if !s.Scan() || len(s.Bytes()) == 0 || bytes.Contains(s.Bytes(), []byte{'\t'}) {
-		panic("invalid root")
+	line, root, err := readHeader(s)
+	if err != nil {
+		return Index{}, err
 	}
-	idx := Index{Root: s.Text(), Groups: make([]Files, 0, 128)}
 	var g Files
-	for line := 2; s.Scan(); line++ {
+	groups := make([]Files, 0, 512)
+	for ; s.Scan(); line++ {
 		if ln, ok := bytes.CutPrefix(s.Bytes(), []byte("\t\t")); ok {
 			if len(g) == 0 {
-				panic(fmt.Sprint("missing file group before line ", line))
+				return Index{}, fmt.Errorf("index: missing file group before line %d", line)
 			}
-			digest, size, ok := bytes.Cut(ln, []byte{'\t'})
-			if n, err := hex.Decode(g[0].Digest[:], digest); n != len(Digest{}) || err != nil {
-				panic(fmt.Sprint("invalid digest on line ", line))
+			digest, tail, ok := bytes.Cut(ln, []byte{'\t'})
+			if n, err := hex.Decode(g[0].Digest[:], digest); !ok || n != len(Digest{}) || err != nil {
+				return Index{}, fmt.Errorf("index: invalid digest on line %d", line)
 			}
+			size, mod, ok := bytes.Cut(tail, []byte{'\t'})
 			v, err := strconv.ParseUint(string(size), 10, 63)
-			if !ok || err != nil {
-				panic(fmt.Sprint("invalid size on line ", line))
+			if g[0].Size = int64(v); !ok || err != nil {
+				return Index{}, fmt.Errorf("index: invalid size on line %d", line)
 			}
-			g[0].Size = int64(v)
+			if g[0].Mod, err = time.Parse(time.RFC3339Nano, string(mod)); err != nil {
+				return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
+			}
 			for _, f := range g[1:] {
-				f.Size, f.Digest = g[0].Size, g[0].Digest
+				f.Digest, f.Size, f.Mod = g[0].Digest, g[0].Size, g[0].Mod
 			}
-			idx.Groups = append(idx.Groups, g)
-			g = nil
+			groups = append(groups, append(make(Files, 0, len(g)), g...))
+			g = g[:0]
 		} else {
-			attr, path, ok := bytes.Cut(s.Bytes(), []byte{'\t'})
-			if !ok || len(attr) > 3 || len(path) == 0 {
-				panic(fmt.Sprint("invalid entry on line ", line))
+			attr, p, ok := bytes.Cut(s.Bytes(), []byte{'\t'})
+			if !ok || len(attr) > 3 || len(p) == 0 {
+				return Index{}, fmt.Errorf("index: invalid entry on line %d", line)
 			}
-			g = append(g, &File{Path: Path{string(path)}})
+			g = append(g, &File{Path: filePath(string(p))})
 		}
 	}
-	if err := s.Err(); err != nil {
-		panic(err)
+	if s.Err() != nil {
+		return Index{}, fmt.Errorf("index: read error: %w", s.Err())
 	}
 	if len(g) != 0 {
-		panic("incomplete final file group")
+		return Index{}, fmt.Errorf("index: incomplete final group")
 	}
-	return idx
+	return Index{root, groups}, nil
 }
 
 // Write writes index contents to dst.
 func (idx Index) Write(dst io.Writer) error {
 	const DigestHex = 2 * len(Digest{})
 	var buf [max(DigestHex, len(time.RFC3339Nano))]byte
+	now := time.Now()
 	w := bufio.NewWriter(dst)
-	_, _ = w.WriteString(filepath.ToSlash(idx.Root))
-	_ = w.WriteByte('\n')
+	writeHeader(w, idx.Root)
 	for _, g := range idx.Groups {
 		var mod time.Time
 		for _, f := range g {
 			_ = w.WriteByte('\t')
 			_, _ = w.WriteString(f.p)
 			_ = w.WriteByte('\n')
+			if f.Digest != g[0].Digest || f.Size != g[0].Size {
+				panic(fmt.Sprintf("index: group mismatch: %s", f))
+			}
 			if mod.Before(f.Mod) {
-				mod = f.Mod
+				if mod = f.Mod; !mod.Before(now) {
+					panic(fmt.Sprintf("index: modification time in the future: %s", f))
+				}
 			}
 		}
 		_, _ = w.WriteString("\t\t")
@@ -107,20 +134,32 @@ func (idx Index) Write(dst io.Writer) error {
 	return w.Flush()
 }
 
-// File is a regular file in the file system.
-type File struct {
-	Path
-	Digest Digest
-	Size   int64
-	Mod    time.Time
+const hdr = "fsx index v1"
+
+func readHeader(s *bufio.Scanner) (line int, root string, err error) {
+	if line++; !s.Scan() {
+		err = fmt.Errorf("index: missing signature: %w", s.Err())
+		return
+	}
+	if sig := s.Bytes(); string(sig) != hdr {
+		err = fmt.Errorf("index: invalid signature: %s", sig)
+		return
+	}
+	if line++; !s.Scan() {
+		err = fmt.Errorf("index: missing root: %w", s.Err())
+		return
+	}
+	p := s.Text()
+	if p != path.Clean(filepath.ToSlash(p)) || strings.IndexByte(p, '\t') >= 0 {
+		err = fmt.Errorf("index: invalid root: %s", p)
+		return
+	}
+	return line + 1, p, nil
 }
 
-// Files is an ordered list of files.
-type Files []*File
-
-// Sort sorts files by path.
-func (all Files) Sort() {
-	sort.SliceStable(all, func(i, j int) bool {
-		return all[i].less(all[j].Path)
-	})
+func writeHeader(w *bufio.Writer, root string) {
+	_, _ = w.WriteString(hdr)
+	_ = w.WriteByte('\n')
+	_, _ = w.WriteString(root)
+	_ = w.WriteByte('\n')
 }

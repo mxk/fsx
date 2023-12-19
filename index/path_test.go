@@ -36,7 +36,7 @@ func TestPathContains(t *testing.T) {
 }
 
 func TestPathDirBase(t *testing.T) {
-	tests := []struct{p, dir, base string}{
+	tests := []struct{ p, dir, base string }{
 		{".", ".", "."},
 		{"a", ".", "a"},
 		{"a/", ".", "a"},

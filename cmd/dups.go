@@ -21,7 +21,10 @@ type dupCmd struct{}
 func (*dupCmd) Info() *cli.Cfg { return dupsCli }
 
 func (cmd *dupCmd) Main(args []string) error {
-	idx := index.Load(args[0])
+	idx, err := index.Load(args[0])
+	if err != nil {
+		return err
+	}
 	t := idx.ToTree()
 	for _, dup := range t.Dups() {
 		fmt.Println(dup.Dir.Path)
