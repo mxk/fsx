@@ -40,6 +40,11 @@ func (*vssKopiaCmd) Help(w *cli.Writer) {
 
 	https://kopia.io/docs/advanced/actions/#windows-shadow-copy
 
+	Kopia must have admin privileges for this command to work. When using
+	KopiaUI, disable its "Launch At Startup" option and create a task in the
+	Windows Task Scheduler to run KopiaUI.exe at log on with the highest
+	privileges of a user who is a member of the Administrators group.
+
 	By default, shadow copies are mounted under %SystemDrive% to ensure their
 	visibility in case something goes wrong. The -mnt option can be used to set
 	a different root, which must already exist.
