@@ -7,19 +7,19 @@ import (
 	"github.com/mxk/go-cli"
 )
 
-var vssDeleteCli = vssCli.Add(&cli.Cfg{
-	Name:    "delete|rm",
+var vssRemoveCli = vssCli.Add(&cli.Cfg{
+	Name:    "remove|rm",
 	Usage:   "<id|link>",
-	Summary: "Delete a shadow copy by ID or symlink path",
+	Summary: "Remove a shadow copy by ID or symlink path",
 	MinArgs: 1,
 	MaxArgs: 1,
-	New:     func() cli.Cmd { return vssDeleteCmd{} },
+	New:     func() cli.Cmd { return vssRemoveCmd{} },
 })
 
-type vssDeleteCmd struct{}
+type vssRemoveCmd struct{}
 
-func (vssDeleteCmd) Info() *cli.Cfg { return vssDeleteCli }
+func (vssRemoveCmd) Info() *cli.Cfg { return vssRemoveCli }
 
-func (vssDeleteCmd) Main(args []string) error {
-	return vss.Delete(args[0])
+func (vssRemoveCmd) Main(args []string) error {
+	return vss.Remove(args[0])
 }

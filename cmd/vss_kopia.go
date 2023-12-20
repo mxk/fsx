@@ -76,7 +76,7 @@ func (cmd *vssKopiaCmd) Main([]string) error {
 		if _, err = os.Stat(snapRoot); !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("path already exists: %s", snapRoot)
 		}
-		err := vss.LinkNew(snapRoot, srcVol)
+		err := vss.CreateAt(snapRoot, srcVol)
 		if err == nil {
 			_, err = fmt.Printf("KOPIA_SNAPSHOT_PATH=%s\n", filepath.Join(snapRoot, srcRel))
 		}
@@ -85,7 +85,7 @@ func (cmd *vssKopiaCmd) Main([]string) error {
 		if want := filepath.Join(snapRoot, srcRel); filepath.Clean(snapPath) != want {
 			return fmt.Errorf("unexpected KOPIA_SNAPSHOT_PATH: %s (expecting: %s)", snapPath, want)
 		}
-		return vss.Delete(snapRoot)
+		return vss.Remove(snapRoot)
 	}
 	return cli.Errorf("unsupported KOPIA_ACTION: %s", action)
 }
