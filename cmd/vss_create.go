@@ -25,13 +25,12 @@ type vssCreateCmd struct {
 func (*vssCreateCmd) Info() *cli.Cfg { return vssCreateCli }
 
 func (cmd *vssCreateCmd) Main(args []string) error {
-	id, err := vss.Create(args[0])
-	if err != nil {
-		return err
-	}
 	if cmd.Link != "" {
-		return vss.Link(cmd.Link, id)
+		return vss.LinkNew(cmd.Link, args[0])
 	}
-	fmt.Println(id)
-	return nil
+	id, err := vss.Create(args[0])
+	if err == nil {
+		_, err = fmt.Println(id)
+	}
+	return err
 }
