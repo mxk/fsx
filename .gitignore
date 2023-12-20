@@ -1,3 +1,4 @@
+/cmd/local.go
 /test/
 *.exe
 *.db
