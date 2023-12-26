@@ -9,8 +9,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mxk/fsx/vss"
 	"github.com/mxk/go-cli"
+	"github.com/mxk/go-vss"
 )
 
 var vssListCli = vssCli.Add(&cli.Cfg{

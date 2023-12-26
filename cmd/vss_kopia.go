@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mxk/fsx/vss"
 	"github.com/mxk/go-cli"
+	"github.com/mxk/go-vss"
 )
 
 var vssKopiaCli = vssCli.Add(&cli.Cfg{

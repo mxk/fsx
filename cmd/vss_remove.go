@@ -3,8 +3,8 @@
 package cmd
 
 import (
-	"github.com/mxk/fsx/vss"
 	"github.com/mxk/go-cli"
+	"github.com/mxk/go-vss"
 )
 
 var vssRemoveCli = vssCli.Add(&cli.Cfg{
