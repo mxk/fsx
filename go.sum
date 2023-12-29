@@ -10,8 +10,8 @@ github.com/klauspost/cpuid/v2 v2.2.6 h1:ndNyv040zDGIDh8thGkXYjnFtiN02M1PVVF+JE/4
 github.com/klauspost/cpuid/v2 v2.2.6/go.mod h1:Lcz8mBdAVJIBVzewtcLocK12l3Y+JytZYpaMropDUws=
 github.com/mxk/go-cli v0.5.0 h1:ZX4XFlJCZ0k+KKzkxrjJxA+DpYWFmBZ6mdo43FnZ7lg=
 github.com/mxk/go-cli v0.5.0/go.mod h1:TlwUzb7gDpjjHwh6/a7G33/xPqITmN1oOR6Vzk4WJK8=
-github.com/mxk/go-vss v0.1.0 h1:6eajn7ofbrUfnaUftr6LDYbr5UQOO/oUZDVSw6vziWw=
-github.com/mxk/go-vss v0.1.0/go.mod h1:NdVlro1swzoYRmdqITs31o4eKiFNE67abHvIHHqSMwU=
+github.com/mxk/go-vss v1.0.0 h1:Cupqpx3WPRVL3JFv8pVuoTplLFt2/CverzfIeusrHLs=
+github.com/mxk/go-vss v1.0.0/go.mod h1:ZQ4yFxCG54vqPnCd+p2IxAe5jwZdz56wSjbwzBXiFd8=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

@@ -76,7 +76,7 @@ func (cmd *vssKopiaCmd) Main([]string) error {
 		if _, err = os.Stat(snapRoot); !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("path already exists: %s", snapRoot)
 		}
-		err := vss.CreateAt(snapRoot, srcVol)
+		err := vss.CreateLink(snapRoot, srcVol)
 		if err == nil {
 			_, err = fmt.Printf("KOPIA_SNAPSHOT_PATH=%s\n", filepath.Join(snapRoot, srcRel))
 		}

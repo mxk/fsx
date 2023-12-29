@@ -26,7 +26,7 @@ func (*vssCreateCmd) Info() *cli.Cfg { return vssCreateCli }
 
 func (cmd *vssCreateCmd) Main(args []string) error {
 	if cmd.Link != "" {
-		return vss.CreateAt(cmd.Link, args[0])
+		return vss.CreateLink(cmd.Link, args[0])
 	}
 	id, err := vss.Create(args[0])
 	if err == nil {
