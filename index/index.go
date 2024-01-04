@@ -178,14 +178,14 @@ func (idx Index) Write(dst io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err = idx.write(w); err == nil {
+	if err = idx.WriteRaw(w); err == nil {
 		err = w.Close()
 	}
 	return err
 }
 
-// Write writes uncompressed index contents to dst.
-func (idx Index) write(dst io.Writer) error {
+// WriteRaw writes uncompressed index contents to dst.
+func (idx Index) WriteRaw(dst io.Writer) error {
 	const digestHex = 2 * len(Digest{})
 	var tmpBuf [max(digestHex, len(timeFmt))]byte
 	w := bufio.NewWriter(dst)

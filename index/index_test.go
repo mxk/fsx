@@ -47,7 +47,7 @@ func TestIndex(t *testing.T) {
 
 	// Without compression
 	var buf bytes.Buffer
-	require.NoError(t, want.write(&buf))
+	require.NoError(t, want.WriteRaw(&buf))
 	require.Equal(t, testIdx, buf.String())
 	have, err := read(&buf)
 	require.NoError(t, err)
