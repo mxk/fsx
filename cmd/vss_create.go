@@ -9,7 +9,7 @@ import (
 	"github.com/mxk/go-vss"
 )
 
-var vssCreateCli = vssCli.Add(&cli.Cfg{
+var _ = vssCli.Add(&cli.Cfg{
 	Name:    "create|mk",
 	Usage:   "[-link <path>] <volume>",
 	Summary: "Create a shadow copy",
@@ -21,8 +21,6 @@ var vssCreateCli = vssCli.Add(&cli.Cfg{
 type vssCreateCmd struct {
 	Link string `cli:"Symlink {path} where to mount the new shadow copy"`
 }
-
-func (*vssCreateCmd) Info() *cli.Cfg { return vssCreateCli }
 
 func (cmd *vssCreateCmd) Main(args []string) error {
 	if cmd.Link != "" {

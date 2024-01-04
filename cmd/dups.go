@@ -3,11 +3,12 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/mxk/fsx/index"
 	"github.com/mxk/go-cli"
+
+	"github.com/mxk/fsx/index"
 )
 
-var dupsCli = cli.Main.Add(&cli.Cfg{
+var _ = cli.Main.Add(&cli.Cfg{
 	Name:    "dups",
 	Usage:   "<db>",
 	Summary: "Find duplicate directories",
@@ -17,8 +18,6 @@ var dupsCli = cli.Main.Add(&cli.Cfg{
 })
 
 type dupCmd struct{}
-
-func (*dupCmd) Info() *cli.Cfg { return dupsCli }
 
 func (cmd *dupCmd) Main(args []string) error {
 	idx, err := index.Load(args[0])

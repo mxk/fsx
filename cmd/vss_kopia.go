@@ -14,7 +14,7 @@ import (
 	"github.com/mxk/go-vss"
 )
 
-var vssKopiaCli = vssCli.Add(&cli.Cfg{
+var _ = vssCli.Add(&cli.Cfg{
 	Name:    "kopia",
 	Summary: "Manage shadow copies for Kopia backup actions",
 	New: func() cli.Cmd {
@@ -29,8 +29,6 @@ var vssKopiaCli = vssCli.Add(&cli.Cfg{
 type vssKopiaCmd struct {
 	Mnt string `cli:"Root {directory} where to mount shadow copies"`
 }
-
-func (*vssKopiaCmd) Info() *cli.Cfg { return vssKopiaCli }
 
 func (*vssKopiaCmd) Help(w *cli.Writer) {
 	w.Text(`

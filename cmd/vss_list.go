@@ -13,7 +13,7 @@ import (
 	"github.com/mxk/go-vss"
 )
 
-var vssListCli = vssCli.Add(&cli.Cfg{
+var _ = vssCli.Add(&cli.Cfg{
 	Name:    "list|ls",
 	Usage:   "[-vol <name>]",
 	Summary: "List existing shadow copies",
@@ -23,8 +23,6 @@ var vssListCli = vssCli.Add(&cli.Cfg{
 type vssListCmd struct {
 	Vol string `cli:"Filter by volume {name} (e.g. 'C:')"`
 }
-
-func (*vssListCmd) Info() *cli.Cfg { return vssListCli }
 
 func (cmd *vssListCmd) Main([]string) error {
 	all, err := vss.List(cmd.Vol)
@@ -40,8 +38,8 @@ func (cmd *vssListCmd) Main([]string) error {
 		if path == "" {
 			path = sc.VolumeName
 		}
-		w.WriteString(path)
-		if w.WriteByte(' '); err != nil {
+		_, _ = w.WriteString(path)
+		if _ = w.WriteByte(' '); err != nil {
 			fmt.Fprintf(w, "(%s) ", err)
 		}
 		fmt.Fprintln(w, sc.InstallDate.Format(time.DateTime), sc.ID, sc.DeviceObject)

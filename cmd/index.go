@@ -18,7 +18,7 @@ import (
 	"github.com/mxk/fsx/index"
 )
 
-var indexCli = cli.Main.Add(&cli.Cfg{
+var _ = cli.Main.Add(&cli.Cfg{
 	Name:    "index",
 	Usage:   "<out-db> <dir>",
 	Summary: "Create an index file",
@@ -28,8 +28,6 @@ var indexCli = cli.Main.Add(&cli.Cfg{
 })
 
 type indexCmd struct{}
-
-func (*indexCmd) Info() *cli.Cfg { return indexCli }
 
 func (cmd *indexCmd) Main(args []string) error {
 	files := make(chan *index.File, 1)
