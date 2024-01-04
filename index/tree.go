@@ -23,14 +23,14 @@ type Tree struct {
 // ToTree creates a tree representation of the file system index.
 func (idx Index) ToTree() *Tree {
 	t := &Tree{
-		dirs: make(map[Path]*Dir, len(idx.Groups)),
-		idx:  make(map[Digest]Files, len(idx.Groups)),
+		dirs: make(map[Path]*Dir, len(idx.groups)),
+		idx:  make(map[Digest]Files, len(idx.groups)),
 	}
 
 	// Add each file to the tree, creating all required Dir entries
-	for _, g := range idx.Groups {
+	for _, g := range idx.groups {
 		if _, dup := t.idx[g[0].Digest]; dup {
-			panic(fmt.Sprintf("digest collision: %x", g[0].Digest))
+			panic(fmt.Sprintf("index: digest collision: %x", g[0].Digest))
 		}
 		t.idx[g[0].Digest] = g
 		for _, f := range g {
@@ -48,7 +48,7 @@ func (idx Index) ToTree() *Tree {
 		d.Dirs = nil
 		for _, sd := range subdirs {
 			if _, ok := t.dirs[sd.Path]; !ok {
-				panic(fmt.Sprint("missing directory: ", sd.Path))
+				panic(fmt.Sprint("index: missing directory: ", sd.Path))
 			}
 			d.Files = append(d.Files, sd.Files...)
 			sd.Dirs, sd.Files = nil, nil
@@ -204,7 +204,7 @@ next:
 				}
 				if maxRefs < math.MaxInt {
 					if used++; bestAlt == Root {
-						panic("alt not found")
+						panic("index: alt not found")
 					}
 					dirs[bestAlt] = math.MaxInt
 				}

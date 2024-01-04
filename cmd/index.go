@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,8 +38,7 @@ func (cmd *indexCmd) Main(args []string) error {
 		stats.addFile(file.Size)
 	}
 	stats.report()
-	all.Sort()
-	idx := index.Index{Root: args[1], Groups: groupByDigest(all)}
+	idx := index.New(args[1], all)
 	return cli.WriteFileAtomic(args[0], func(f *os.File) error {
 		return idx.Write(f)
 	})
@@ -63,7 +61,7 @@ func walkFS(fsys fs.FS, files chan<- *index.File) {
 	}
 	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if strings.IndexByte(path, '\n') >= 0 {
-			panic(fmt.Sprintf("New line in path: %q", path))
+			panic(fmt.Sprintf("new line in path: %q", path))
 		}
 		if err != nil {
 			log.Printf("Walk error: %s (%v)", path, err)
@@ -90,32 +88,6 @@ func hashFiles(fsys fs.FS, paths <-chan string, files chan<- *index.File) {
 			files <- f
 		}
 	}
-}
-
-func groupByDigest(all index.Files) []index.Files {
-	type group struct {
-		order int
-		files index.Files
-	}
-	idx := make(map[index.Digest]group, len(all))
-	for i, f := range all {
-		g, ok := idx[f.Digest]
-		if !ok {
-			g.order = i
-		} else if g.files[0].Size != f.Size {
-			panic(fmt.Sprintf("Hash collision: %q != %q", g.files[0].Path, f.Path))
-		}
-		g.files = append(g.files, f)
-		idx[f.Digest] = g
-	}
-	groups := make([]index.Files, 0, len(idx))
-	for _, g := range idx {
-		groups = append(groups, g.files)
-	}
-	sort.Slice(groups, func(i, j int) bool {
-		return idx[groups[i][0].Digest].order < idx[groups[j][0].Digest].order
-	})
-	return groups
 }
 
 type Stats struct {

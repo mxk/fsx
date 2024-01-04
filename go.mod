@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/dustin/go-humanize v1.0.1
+	github.com/klauspost/compress v1.17.4
 	github.com/mxk/go-cli v0.5.0
 	github.com/mxk/go-vss v1.1.1
 	github.com/stretchr/testify v1.8.4

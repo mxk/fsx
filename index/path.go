@@ -76,7 +76,7 @@ func (p Path) less(other Path) bool {
 				return aDir
 			}
 			// Path separator is less than any other byte
-			return a[i] == '/' || (a[i] < b[i] && b[i] != '/')
+			return a[i] == '/' || (b[i] != '/' && a[i] < b[i])
 		}
 	}
 	// One of the paths is a prefix of the other. If needed, swap the paths so
@@ -89,10 +89,11 @@ func (p Path) less(other Path) bool {
 		a, b = b, a
 		invert = true
 	}
-	// a is a prefix of b and the next byte in b cannot be a '/'. We require
-	// directories to end with a '/' to ensure consistent ordering when sorting
-	// ["b/", "b/c", "a"]. Without the '/' suffix, we'd sort "a" before "b"
-	// since we wouldn't know that "b" is a directory.
+	// a is a prefix of b and the next byte in b cannot be a '/' since the same
+	// name cannot be both a file and a directory. We require directories to end
+	// with a '/' to ensure consistent ordering when sorting ["b/", "b/c", "a"].
+	// Without the '/' suffix, we'd sort "a" before "b" since we wouldn't know
+	// that "b" is a directory.
 	bSep := strings.IndexByte(b[len(a):], '/')
 	if bSep == 0 {
 		panic(fmt.Sprintf("index: directory without separator suffix: %s", a))
