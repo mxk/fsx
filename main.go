@@ -5,6 +5,8 @@ import (
 
 	// CLI registration
 	_ "github.com/mxk/fsx/cmd"
+	_ "github.com/mxk/fsx/cmd/index"
+	_ "github.com/mxk/fsx/cmd/vss"
 )
 
 func main() {

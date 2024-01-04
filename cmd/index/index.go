@@ -1,6 +1,6 @@
 //go:build windows
 
-package cmd
+package index
 
 import "github.com/mxk/go-cli"
 
