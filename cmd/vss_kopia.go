@@ -3,9 +3,7 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,20 +15,12 @@ import (
 var _ = vssCli.Add(&cli.Cfg{
 	Name:    "kopia",
 	Summary: "Manage shadow copies for Kopia backup actions",
-	New: func() cli.Cmd {
-		mnt := os.Getenv("SystemDrive")
-		if mnt == "" {
-			mnt = "C:"
-		}
-		return &vssKopiaCmd{mnt + `\`}
-	},
+	New:     func() cli.Cmd { return vssKopiaCmd{} },
 })
 
-type vssKopiaCmd struct {
-	Mnt string `cli:"Root {directory} where to mount shadow copies"`
-}
+type vssKopiaCmd struct{}
 
-func (*vssKopiaCmd) Help(w *cli.Writer) {
+func (vssKopiaCmd) Help(w *cli.Writer) {
 	w.Text(`
 	This command can be set as the Before/After Snapshot action in Kopia to use
 	the Volume Shadow Copy Service for consistent backups. It performs the same
@@ -42,14 +32,10 @@ func (*vssKopiaCmd) Help(w *cli.Writer) {
 	KopiaUI, disable its "Launch At Startup" option and create a task in the
 	Windows Task Scheduler to run KopiaUI.exe at log on with the highest
 	privileges of a user who is a member of the Administrators group.
-
-	By default, shadow copies are mounted under %SystemDrive% to ensure their
-	visibility in case something goes wrong. The -mnt option can be used to set
-	a different root, which must already exist.
 	`)
 }
 
-func (cmd *vssKopiaCmd) Main([]string) error {
+func (vssKopiaCmd) Main([]string) error {
 	var (
 		action   = os.Getenv("KOPIA_ACTION")
 		snapID   = os.Getenv("KOPIA_SNAPSHOT_ID")
@@ -64,26 +50,41 @@ func (cmd *vssKopiaCmd) Main([]string) error {
 	if err != nil {
 		return err
 	}
-	if cmd.Mnt, err = filepath.Abs(cmd.Mnt); err != nil {
-		return err
-	}
-	snapRoot := filepath.Join(cmd.Mnt, fmt.Sprintf(".kopia-%s-%s",
-		strings.NewReplacer(`:`, ``, `\`, ``).Replace(srcVol), snapID))
 	switch action {
 	case "before-snapshot-root":
-		if _, err = os.Stat(snapRoot); !errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("path already exists: %s", snapRoot)
-		}
-		err := vss.CreateLink(snapRoot, srcVol)
-		if err == nil {
-			_, err = fmt.Printf("KOPIA_SNAPSHOT_PATH=%s\n", filepath.Join(snapRoot, srcRel))
-		}
-		return err
+		return create(srcVol, srcRel)
 	case "after-snapshot-root":
-		if want := filepath.Join(snapRoot, srcRel); filepath.Clean(snapPath) != want {
-			return fmt.Errorf("unexpected KOPIA_SNAPSHOT_PATH: %s (expecting: %s)", snapPath, want)
+		if dev := deviceObject(snapPath); dev != "" {
+			return vss.Remove(dev)
 		}
-		return vss.Remove(snapRoot)
+		return cli.Errorf("invalid KOPIA_SNAPSHOT_PATH: %s", snapPath)
 	}
 	return cli.Errorf("unsupported KOPIA_ACTION: %s", action)
+}
+
+func create(srcVol, srcRel string) (err error) {
+	id, err := vss.Create(srcVol)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = vss.Remove(id)
+		}
+	}()
+	sc, err := vss.Get(id)
+	if err == nil {
+		_, err = fmt.Printf("KOPIA_SNAPSHOT_PATH=%s\\\n", filepath.Join(sc.DeviceObject, srcRel))
+	}
+	return err
+}
+
+func deviceObject(name string) string {
+	name = filepath.FromSlash(name)
+	i := strings.Index(name, "HarddiskVolumeShadowCopy")
+	j := strings.IndexByte(name[i+1:], filepath.Separator)
+	if i < 0 || j < 0 {
+		return ""
+	}
+	return name[:i+1+j]
 }
