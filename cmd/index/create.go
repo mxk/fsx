@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -30,9 +31,9 @@ type indexCreateCmd struct{}
 
 func (indexCreateCmd) Main(args []string) error {
 	files := make(chan *index.File, 1)
-	go walkFS(os.DirFS(args[1]), files)
+	go walkFS(os.DirFS(filepath.Clean(args[1])), files)
 	all := make(index.Files, 0, 4096)
-	stats := NewStats()
+	stats := newStats()
 	for file := range files {
 		all = append(all, file)
 		stats.addFile(file.Size)
@@ -90,22 +91,20 @@ func hashFiles(fsys fs.FS, paths <-chan string, files chan<- *index.File) {
 	}
 }
 
-type Stats struct {
+// stats reports file hashing progress.
+type stats struct {
 	start      time.Time
 	lastReport time.Time
 	files      uint64
 	bytes      uint64
 }
 
-func NewStats() Stats {
+func newStats() stats {
 	t := time.Now()
-	return Stats{
-		start:      t,
-		lastReport: t,
-	}
+	return stats{start: t, lastReport: t}
 }
 
-func (s *Stats) addFile(bytes int64) {
+func (s *stats) addFile(bytes int64) {
 	s.files++
 	s.bytes += uint64(bytes)
 	if time.Since(s.lastReport) >= 5*time.Minute {
@@ -113,7 +112,7 @@ func (s *Stats) addFile(bytes int64) {
 	}
 }
 
-func (s *Stats) report() {
+func (s *stats) report() {
 	s.lastReport = time.Now()
 	dur := s.lastReport.Sub(s.start)
 	sec := dur.Seconds()

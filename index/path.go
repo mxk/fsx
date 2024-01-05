@@ -17,11 +17,8 @@ var Root = Path{"."}
 // filePath wraps a path to a file. It panics if the path is not a file, not
 // slash-separated, or not clean.
 func filePath(p string) Path {
-	if path.Clean(filepath.ToSlash(p)) != p {
+	if p == "." || path.Clean(filepath.ToSlash(p)) != p {
 		panic(fmt.Sprintf("index: non-clean or non-file path: %s", p))
-	}
-	if p == "." {
-		panic("index: non-file path: .")
 	}
 	return Path{p}
 }

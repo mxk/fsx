@@ -60,6 +60,10 @@ func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
 	if n != fi.Size() {
 		return nil, fmt.Errorf("index: file size mistmach: %s (want %d, got %d)", name, fi.Size(), n)
 	}
+	if n == 0 {
+		// Zero-length files get a unique hash based on their full name
+		_, _ = h.h.WriteString(name)
+	}
 
 	// Verify that file size and modtime have not changed
 	fi2, err := fs.Stat(fsys, name)
@@ -67,10 +71,21 @@ func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
 		return nil, fmt.Errorf("index: file modified while reading: %s", name)
 	}
 
-	// Set digest
-	file := &File{Path: filePath(name), Size: fi.Size(), ModTime: fi.ModTime()}
-	if b := h.h.Sum(file.Digest[:0]); &b[len(b)-1] != &file.Digest[len(file.Digest)-1] {
+	file := &File{filePath(name), h.digest(), fi.Size(), fi.ModTime()}
+	return file, nil
+}
+
+// StringDigest returns the Digest of the specified string.
+func (h *Hasher) StringDigest(s string) Digest {
+	h.h.Reset()
+	_, _ = h.h.WriteString(s)
+	return h.digest()
+}
+
+// digest returns the current hash Digest.
+func (h *Hasher) digest() (d Digest) {
+	if b := h.h.Sum(d[:0]); &b[len(b)-1] != &d[len(d)-1] {
 		panic("index: digest buffer reallocated")
 	}
-	return file, nil
+	return
 }

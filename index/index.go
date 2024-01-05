@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,7 +163,7 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 		return
 	}
 	p := s.Text()
-	if p != path.Clean(filepath.ToSlash(p)) || strings.IndexByte(p, '\t') >= 0 {
+	if strings.IndexByte(p, '\t') >= 0 {
 		err = fmt.Errorf("index: invalid root: %s", p)
 		return
 	}
@@ -173,7 +171,7 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 }
 
 // Write writes index contents to dst.
-func (idx Index) Write(dst io.Writer) error {
+func (idx *Index) Write(dst io.Writer) error {
 	w, err := zstd.NewWriter(dst)
 	if err != nil {
 		return err
@@ -185,7 +183,7 @@ func (idx Index) Write(dst io.Writer) error {
 }
 
 // WriteRaw writes uncompressed index contents to dst.
-func (idx Index) WriteRaw(dst io.Writer) error {
+func (idx *Index) WriteRaw(dst io.Writer) error {
 	const digestHex = 2 * len(Digest{})
 	var tmpBuf [max(digestHex, len(timeFmt))]byte
 	w := bufio.NewWriter(dst)
@@ -196,7 +194,7 @@ func (idx Index) WriteRaw(dst io.Writer) error {
 		}
 		return b
 	}
-	writeHeader(w, idx.root)
+	idx.writeHeader(w)
 	for _, g := range idx.groups {
 		// File paths
 		for _, f := range g {
@@ -238,11 +236,26 @@ func (idx Index) WriteRaw(dst io.Writer) error {
 }
 
 // writeHeader writes the index version and root path to w.
-func writeHeader(w *bufio.Writer, root string) {
+func (idx *Index) writeHeader(w *bufio.Writer) {
 	_, _ = w.WriteString(v1)
 	_ = w.WriteByte('\n')
-	_, _ = w.WriteString(root)
+	_, _ = w.WriteString(idx.root)
 	_ = w.WriteByte('\n')
+}
+
+// Root returns the index root directory.
+func (idx *Index) Root() string {
+	return idx.root
+}
+
+// All returns all files.
+func (idx *Index) All() Files {
+	all := make(Files, 0, len(idx.groups))
+	for _, g := range idx.groups {
+		all = append(all, g...)
+	}
+	all.Sort()
+	return all
 }
 
 // groupByDigest combines files with identical digests into groups. The returned

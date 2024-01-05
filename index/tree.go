@@ -21,7 +21,7 @@ type Tree struct {
 }
 
 // ToTree creates a tree representation of the file system index.
-func (idx Index) ToTree() *Tree {
+func (idx *Index) ToTree() *Tree {
 	t := &Tree{
 		dirs: make(map[Path]*Dir, len(idx.groups)),
 		idx:  make(map[Digest]Files, len(idx.groups)),
