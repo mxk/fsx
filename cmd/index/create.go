@@ -1,7 +1,6 @@
 package index
 
 import (
-	"fmt"
 	"io/fs"
 	"log"
 	"math"
@@ -10,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -30,65 +30,92 @@ var _ = indexCli.Add(&cli.Cfg{
 type indexCreateCmd struct{}
 
 func (indexCreateCmd) Main(args []string) error {
+	root := filepath.Clean(args[1])
 	files := make(chan *index.File, 1)
-	go walkFS(os.DirFS(filepath.Clean(args[1])), files)
+	w := walker{fsys: os.DirFS(root), files: files}
+	go w.walk()
+
 	all := make(index.Files, 0, 4096)
 	stats := newStats()
-	for file := range files {
-		all = append(all, file)
-		stats.addFile(file.Size)
+	for f := range files {
+		all = append(all, f)
+		stats.addFile(f.Size)
 	}
 	stats.report()
-	idx := index.New(args[1], all)
-	return cli.WriteFileAtomic(args[0], func(f *os.File) error {
+
+	idx := index.New(root, all)
+	err := cli.WriteFileAtomic(args[0], func(f *os.File) error {
 		return idx.Write(f)
 	})
+	if err == nil && w.err.Load() {
+		err = cli.ExitCode(1)
+	}
+	return err
 }
 
-func walkFS(fsys fs.FS, files chan<- *index.File) {
-	paths := make(chan string, 1)
-	wg := new(sync.WaitGroup)
+// walker walks the file system, hashing all regular files.
+type walker struct {
+	fsys  fs.FS
+	files chan<- *index.File
+	wg    sync.WaitGroup
+	err   atomic.Bool
+}
+
+func (w *walker) walk() {
+	names := make(chan string, 1)
 	defer func() {
-		close(paths)
-		wg.Wait()
-		close(files)
+		close(names)
+		w.wg.Wait()
+		close(w.files)
 	}()
-	for i := 0; i < runtime.NumCPU(); i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			hashFiles(fsys, paths, files)
-		}()
+	for n := runtime.NumCPU(); n > 0; n-- {
+		w.wg.Add(1)
+		go w.hash(names)
 	}
-	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
-		if strings.IndexByte(path, '\n') >= 0 {
-			panic(fmt.Sprintf("new line in path: %q", path))
-		}
+	err := fs.WalkDir(w.fsys, ".", func(name string, e fs.DirEntry, err error) error {
 		if err != nil {
-			log.Printf("Walk error: %s (%v)", path, err)
-		} else if d.Type().IsRegular() {
-			paths <- path
-		} else if !d.IsDir() {
-			log.Printf("Not a directory or file: %s", path)
+			w.errorf("Walk error: %s (%v)", name, err)
+			err = nil
+		} else if strings.IndexByte(name, '\n') >= 0 {
+			w.errorf("New line in path: %q", name)
+			err = fs.SkipDir
+		} else if e.Type().IsRegular() {
+			names <- name
+		} else if !e.IsDir() {
+			w.errorln("Not a directory or file:", name)
 		}
-		return nil
+		return err
 	})
 	if err != nil {
-		log.Println("Final walk error:", err)
+		w.errorln("Walk error:", err)
 	}
 }
 
-// hashFiles computes the digest of each file received from paths and sends the
-// corresponding File to files.
-func hashFiles(fsys fs.FS, paths <-chan string, files chan<- *index.File) {
+func (w *walker) hash(names <-chan string) {
+	defer w.wg.Done()
 	h := index.NewHasher()
-	for path := range paths {
-		if f, err := h.Read(fsys, path); err != nil {
-			log.Print(err)
+	for name := range names {
+		if f, err := h.Read(w.fsys, name); err != nil {
+			w.error(err)
 		} else {
-			files <- f
+			w.files <- f
 		}
 	}
+}
+
+func (w *walker) error(v ...any) {
+	w.err.Store(true)
+	log.Print(v...)
+}
+
+func (w *walker) errorf(format string, v ...any) {
+	w.err.Store(true)
+	log.Printf(format, v...)
+}
+
+func (w *walker) errorln(v ...any) {
+	w.err.Store(true)
+	log.Println(v...)
 }
 
 // stats reports file hashing progress.
