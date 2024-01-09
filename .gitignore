@@ -3,4 +3,4 @@
 *.db
 *.dups
 *.exe
-*.fsx
+*.fs*

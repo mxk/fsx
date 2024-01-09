@@ -7,6 +7,7 @@ require (
 	github.com/klauspost/compress v1.17.4
 	github.com/mxk/go-cli v0.5.0
 	github.com/mxk/go-vss v1.1.1
+	github.com/rivo/uniseg v0.4.4
 	github.com/stretchr/testify v1.8.4
 	github.com/zeebo/blake3 v0.2.3
 )

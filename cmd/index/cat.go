@@ -1,32 +1,33 @@
 package index
 
 import (
+	"io"
 	"os"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/mxk/go-cli"
-
-	"github.com/mxk/fsx/index"
 )
 
 var _ = indexCli.Add(&cli.Cfg{
 	Name:    "cat",
-	Usage:   "<db> ...",
+	Usage:   "<db>",
 	Summary: "Write file system index to stdout",
 	MinArgs: 1,
+	MaxArgs: 1,
 	New:     func() cli.Cmd { return indexCatCmd{} },
 })
 
 type indexCatCmd struct{}
 
 func (indexCatCmd) Main(args []string) error {
-	for _, name := range args {
-		idx, err := index.Load(name)
-		if err != nil {
-			return err
-		}
-		if err = idx.WriteRaw(os.Stdout); err != nil {
-			return err
-		}
+	f, err := os.Open(args[0])
+	if err != nil {
+		return err
 	}
-	return nil
+	defer func() { _ = f.Close() }()
+	r, err := zstd.NewReader(f)
+	if err == nil {
+		_, err = io.Copy(os.Stdout, r)
+	}
+	return err
 }

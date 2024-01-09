@@ -11,8 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/rivo/uniseg"
 )
 
 const v1 = "fsx index v1"
@@ -87,15 +89,28 @@ func read(src io.Reader) (Index, error) {
 	for ; s.Scan(); line++ {
 		ln, ok := bytes.CutPrefix(s.Bytes(), []byte("\t\t"))
 		if !ok {
-			// File path
-			attr, p, ok := cutByte(ln, '\t')
-			if !ok || len(attr) > 3 || len(p) == 0 {
+			// Attributes
+			attr, ln, ok := cutByte(ln, '\t')
+			if !ok || len(attr) > 3 {
 				return Index{}, fmt.Errorf("index: invalid entry on line %d", line)
+			}
+
+			// Path and modification time
+			p, mod, ok := bytes.Cut(ln, []byte("\t//\t"))
+			f := &File{Path: filePath(string(p))}
+			if ok {
+				if err := f.ModTime.UnmarshalText(bytes.TrimLeft(mod, "\t")); err != nil {
+					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
+				}
+			} else if len(g) == 0 {
+				return Index{}, fmt.Errorf("index: missing modification time on line %d", line)
+			} else {
+				f.ModTime = g[len(g)-1].ModTime
 			}
 			if len(g) == cap(g) && len(g) < 256 {
 				g = append(make(Files, 0, 512), g...)
 			}
-			g = append(g, &File{Path: filePath(string(p))})
+			g = append(g, f)
 			continue
 		}
 		if len(g) == 0 {
@@ -103,39 +118,21 @@ func read(src io.Reader) (Index, error) {
 		}
 
 		// Digest
-		digest, ln, ok := cutByte(ln, '\t')
-		if n, err := hex.Decode(g[0].Digest[:], digest); !ok || n != len(Digest{}) || err != nil {
+		digest, size, ok := cutByte(ln, '\t')
+		n, err := hex.Decode(g[0].Digest[:], digest)
+		if !ok || n != len(Digest{}) || err != nil {
 			return Index{}, fmt.Errorf("index: invalid digest on line %d", line)
 		}
 
 		// Size
-		size, ln, ok := cutByte(ln, '\t')
-		v, err := strconv.ParseUint(string(size), 10, 63)
+		v, err := strconv.ParseUint(unsafeString(size), 10, 63)
 		if g[0].Size = int64(v); !ok || err != nil {
 			return Index{}, fmt.Errorf("index: invalid size on line %d", line)
 		}
 
-		// Modification time(s)
-		var mod []byte
-		for i := 0; len(ln) > 0; i++ {
-			if i >= len(g) {
-				return Index{}, fmt.Errorf("index: extra modification time(s) on line %d", line)
-			}
-			if mod, ln, _ = cutByte(ln, ','); len(mod) != 0 {
-				if g[i].ModTime, err = time.Parse(timeFmt, string(mod)); err != nil {
-					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
-				}
-			}
-		}
-		if g[0].ModTime.IsZero() {
-			return Index{}, fmt.Errorf("index: missing modification time on line %d", line)
-		}
-
-		// Copy digest, size, and modification times
-		for prev, f := range g[1:] {
-			if f.Digest, f.Size = g[prev].Digest, g[prev].Size; f.ModTime.IsZero() {
-				f.ModTime = g[prev].ModTime
-			}
+		// Copy digest and size
+		for _, f := range g[1:] {
+			f.Digest, f.Size = g[0].Digest, g[0].Size
 		}
 		groups, g = append(groups, g[:len(g):len(g)]), g[len(g):]
 	}
@@ -154,7 +151,7 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 		err = fmt.Errorf("index: missing signature: %w", s.Err())
 		return
 	}
-	if sig := s.Bytes(); string(sig) != v1 {
+	if sig := unsafeString(s.Bytes()); sig != v1 {
 		err = fmt.Errorf("index: invalid signature: %s", sig)
 		return
 	}
@@ -162,12 +159,11 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 		err = fmt.Errorf("index: missing root: %w", s.Err())
 		return
 	}
-	p := s.Text()
-	if strings.IndexByte(p, '\t') >= 0 {
-		err = fmt.Errorf("index: invalid root: %s", p)
+	if root = s.Text(); strings.IndexByte(root, '\t') >= 0 {
+		err = fmt.Errorf("index: invalid root: %s", root)
 		return
 	}
-	return line + 1, p, nil
+	return line + 1, root, nil
 }
 
 // Write writes index contents to dst.
@@ -176,58 +172,69 @@ func (idx *Index) Write(dst io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err = idx.WriteRaw(w); err == nil {
+	if err = idx.write(w); err == nil {
 		err = w.Close()
 	}
 	return err
 }
 
-// WriteRaw writes uncompressed index contents to dst.
-func (idx *Index) WriteRaw(dst io.Writer) error {
+// write writes uncompressed index contents to dst.
+func (idx *Index) write(dst io.Writer) error {
 	const digestHex = 2 * len(Digest{})
-	var tmpBuf [max(digestHex, len(timeFmt))]byte
-	w := bufio.NewWriter(dst)
-	buf := func() []byte {
-		b := w.AvailableBuffer()
-		if cap(b) < len(tmpBuf) {
-			b = tmpBuf[:0]
+	const minAlign = 2*tabWidth + digestHex + tabWidth + (11 &^ (tabWidth - 1)) + tabWidth
+	buf := func(w *bufio.Writer, c int) (b []byte) {
+		if b = w.AvailableBuffer(); cap(b) < c {
+			err := w.Flush()
+			if b = w.AvailableBuffer(); cap(b) < c {
+				if err == nil {
+					panic(fmt.Sprintf("index: insufficient write buffer (have %d, want %d)", cap(b), c))
+				}
+				b = make([]byte, 0, c)
+			}
 		}
-		return b
+		return
 	}
+	w := bufio.NewWriter(dst)
 	idx.writeHeader(w)
+	lineWidth := make([]int, 0, 16)
 	for _, g := range idx.groups {
-		// File paths
-		for _, f := range g {
-			_ = w.WriteByte('\t')
-			_, _ = w.WriteString(f.p)
-			_ = w.WriteByte('\n')
-			if f.Digest != g[0].Digest || f.Size != g[0].Size {
+		// Calculate file path widths
+		align, lineWidth := minAlign, lineWidth[:0]
+		for i, f := range g {
+			n := width(f.p)&^(tabWidth-1) + 3*tabWidth
+			align, lineWidth = max(align, n), append(lineWidth, n)
+			if i != 0 && (f.Digest != g[0].Digest || f.Size != g[0].Size) {
 				panic(fmt.Sprintf("index: group mismatch: %s", f))
 			}
 		}
 
+		// Paths and modification times
+		var t time.Time
+		for i, f := range g {
+			_ = w.WriteByte('\t')
+			_, _ = w.WriteString(f.p)
+			if !f.ModTime.Equal(t) {
+				t = f.ModTime
+				_, _ = w.WriteString("\t//\t")
+				n := (align - lineWidth[i]) / tabWidth
+				b := buf(w, n+len(timeFmt))[:n]
+				for i := range b {
+					b[i] = '\t'
+				}
+				_, _ = w.Write(f.ModTime.AppendFormat(b, timeFmt))
+			}
+			_ = w.WriteByte('\n')
+		}
+
 		// Digest
 		_, _ = w.WriteString("\t\t")
-		b := buf()[:digestHex]
+		b := buf(w, digestHex+1)[:digestHex]
 		hex.Encode(b, g[0].Digest[:])
-		_, _ = w.Write(b)
+		_, _ = w.Write(append(b, '\t'))
 
 		// Size
-		_ = w.WriteByte('\t')
-		_, _ = w.Write(strconv.AppendUint(buf(), uint64(g[0].Size), 10))
-		_ = w.WriteByte('\t')
-
-		// Modification time(s)
-		_, _ = w.Write(g[0].ModTime.AppendFormat(buf(), timeFmt))
-		prev := 0
-		for i, f := range g[1:] {
-			if !f.ModTime.Equal(g[prev].ModTime) {
-				for ; prev <= i; prev++ {
-					_ = w.WriteByte(',')
-				}
-				_, _ = w.Write(f.ModTime.AppendFormat(buf(), timeFmt))
-			}
-		}
+		b = buf(w, len("18446744073709551615"))
+		_, _ = w.Write(strconv.AppendUint(b, uint64(g[0].Size), 10))
 		if err := w.WriteByte('\n'); err != nil {
 			return err
 		}
@@ -293,4 +300,31 @@ func cutByte(s []byte, sep byte) (before, after []byte, found bool) {
 		return s[:i], s[i+1:], true
 	}
 	return s, nil, false
+}
+
+// unsafeString converts a byte slice to a string without copying.
+func unsafeString(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	return unsafe.String(&b[0], len(b))
+}
+
+// tabWidth is a power-of-2 tab character alignment.
+const tabWidth = 1 << 3
+
+// width returns the rendered monospace width of s with tab alignment.
+func width(s string) (n int) {
+	for {
+		i := strings.IndexByte(s, '\t')
+		if i < 0 {
+			return n + uniseg.StringWidth(s)
+		}
+		j := i + 1
+		for j < len(s) && s[j] == '\t' {
+			j++
+		}
+		n = (n+uniseg.StringWidth(s[:i]))&^(tabWidth-1) + (j-i)*tabWidth
+		s = s[j:]
+	}
 }
