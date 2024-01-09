@@ -75,8 +75,6 @@ func Read(src io.Reader) (Index, error) {
 	return read(r)
 }
 
-const timeFmt = time.RFC3339Nano
-
 // read reads uncompressed index contents from src.
 func read(src io.Reader) (Index, error) {
 	s := bufio.NewScanner(src)
@@ -96,10 +94,10 @@ func read(src io.Reader) (Index, error) {
 			}
 
 			// Path and modification time
-			p, mod, ok := bytes.Cut(ln, []byte("\t//\t"))
+			p, ln, _ := bytes.Cut(ln, []byte("\t//"))
 			f := &File{Path: filePath(string(p))}
-			if ok {
-				if err := f.ModTime.UnmarshalText(bytes.TrimLeft(mod, "\t")); err != nil {
+			if len(ln) > 0 {
+				if err := f.ModTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
 					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
 				}
 			} else if len(g) == 0 {
@@ -209,19 +207,19 @@ func (idx *Index) write(dst io.Writer) error {
 		}
 
 		// Paths and modification times
-		var t time.Time
 		for i, f := range g {
 			_ = w.WriteByte('\t')
 			_, _ = w.WriteString(f.p)
-			if !f.ModTime.Equal(t) {
-				t = f.ModTime
+			if i == 0 || !f.ModTime.Equal(g[i-1].ModTime) {
 				_, _ = w.WriteString("\t//\t")
 				n := (align - lineWidth[i]) / tabWidth
-				b := buf(w, n+len(timeFmt))[:n]
+				b := buf(w, n+len(time.RFC3339Nano))[:n]
 				for i := range b {
 					b[i] = '\t'
 				}
-				_, _ = w.Write(f.ModTime.AppendFormat(b, timeFmt))
+				_, _ = w.Write(f.ModTime.AppendFormat(b, time.RFC3339Nano))
+			} else if strings.TrimRight(f.p, "\t\n\v\f\r ") != f.p {
+				_, _ = w.WriteString("\t//")
 			}
 			_ = w.WriteByte('\n')
 		}
