@@ -27,9 +27,7 @@ type Hasher struct {
 }
 
 // NewHasher returns a new file hasher.
-func NewHasher() *Hasher {
-	return &Hasher{h: *newHash()}
-}
+func NewHasher() *Hasher { return &Hasher{h: *newHash()} }
 
 // Read computes the digest of the specified file.
 func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
@@ -73,13 +71,6 @@ func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
 
 	file := &File{filePath(name), h.digest(), fi.Size(), fi.ModTime()}
 	return file, nil
-}
-
-// StringDigest returns the Digest of the specified string.
-func (h *Hasher) StringDigest(s string) Digest {
-	h.h.Reset()
-	_, _ = h.h.WriteString(s)
-	return h.digest()
 }
 
 // digest returns the current hash Digest.

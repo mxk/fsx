@@ -43,6 +43,7 @@ func (indexCreateCmd) Main(args []string) error {
 	}
 	stats.report()
 
+	all.Sort()
 	idx := index.New(root, all)
 	err := cli.WriteFileAtomic(args[0], func(f *os.File) error {
 		return idx.Write(f)

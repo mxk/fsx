@@ -24,9 +24,7 @@ func filePath(p string) Path {
 }
 
 // String returns the raw path.
-func (p Path) String() string {
-	return p.p
-}
+func (p Path) String() string { return p.p }
 
 // IsDir returns whether the path refers to a directory.
 func (p Path) IsDir() bool {

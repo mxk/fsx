@@ -17,8 +17,6 @@ import (
 	"github.com/rivo/uniseg"
 )
 
-const v1 = "fsx index v1"
-
 // Index is the root of an indexed file system.
 type Index struct {
 	root   string
@@ -38,13 +36,11 @@ type Files []*File
 
 // Sort sorts files by path.
 func (fs Files) Sort() {
-	sort.Slice(fs, func(i, j int) bool { return fs[i].less(fs[j].Path) })
+	sort.Slice(fs, func(i, j int) bool { return fs[i].Path.less(fs[j].Path) })
 }
 
 // New creates a new file index.
-func New(root string, all Files) Index {
-	return Index{root, groupByDigest(all)}
-}
+func New(root string, all Files) Index { return Index{root, groupByDigest(all)} }
 
 // Load loads index contents from the specified file path.
 func Load(name string) (Index, error) {
@@ -59,7 +55,7 @@ func Load(name string) (Index, error) {
 	}()
 	idx, err := Read(f)
 	f, err2 := nil, f.Close()
-	if err == nil && err2 != nil {
+	if err == nil {
 		err = err2
 	}
 	return idx, err
@@ -87,9 +83,9 @@ func read(src io.Reader) (Index, error) {
 	for ; s.Scan(); line++ {
 		ln, ok := bytes.CutPrefix(s.Bytes(), []byte("\t\t"))
 		if !ok {
-			// Attributes
-			attr, ln, ok := cutByte(ln, '\t')
-			if !ok || len(attr) > 3 {
+			// Flags
+			flag, ln, ok := cutByte(ln, '\t')
+			if !ok || len(flag) > 3 {
 				return Index{}, fmt.Errorf("index: invalid entry on line %d", line)
 			}
 
@@ -105,6 +101,7 @@ func read(src io.Reader) (Index, error) {
 			} else {
 				f.ModTime = g[len(g)-1].ModTime
 			}
+
 			if len(g) == cap(g) && len(g) < 256 {
 				g = append(make(Files, 0, 512), g...)
 			}
@@ -116,15 +113,15 @@ func read(src io.Reader) (Index, error) {
 		}
 
 		// Digest
-		digest, size, ok := cutByte(ln, '\t')
+		digest, ln, ok := cutByte(ln, '\t')
 		n, err := hex.Decode(g[0].Digest[:], digest)
 		if !ok || n != len(Digest{}) || err != nil {
 			return Index{}, fmt.Errorf("index: invalid digest on line %d", line)
 		}
 
 		// Size
-		v, err := strconv.ParseUint(unsafeString(size), 10, 63)
-		if g[0].Size = int64(v); !ok || err != nil {
+		v, err := strconv.ParseUint(unsafeString(ln), 10, 63)
+		if g[0].Size = int64(v); err != nil {
 			return Index{}, fmt.Errorf("index: invalid size on line %d", line)
 		}
 
@@ -142,6 +139,8 @@ func read(src io.Reader) (Index, error) {
 	}
 	return Index{root, groups}, nil
 }
+
+const v1 = "fsx index v1"
 
 // readHeader reads the index version and root path lines from s.
 func readHeader(s *bufio.Scanner) (line int, root string, err error) {
@@ -196,13 +195,13 @@ func (idx *Index) write(dst io.Writer) error {
 	idx.writeHeader(w)
 	lineWidth := make([]int, 0, 16)
 	for _, g := range idx.groups {
-		// Calculate file path widths
+		// Calculate path widths
 		align, lineWidth := minAlign, lineWidth[:0]
-		for i, f := range g {
-			n := width(f.p)&^(tabWidth-1) + 3*tabWidth
+		for _, f := range g {
+			n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
 			align, lineWidth = max(align, n), append(lineWidth, n)
-			if i != 0 && (f.Digest != g[0].Digest || f.Size != g[0].Size) {
-				panic(fmt.Sprintf("index: group mismatch: %s", f))
+			if f.Digest != g[0].Digest || f.Size != g[0].Size {
+				panic(fmt.Sprintf("index: group digest/size mismatch: %s", f))
 			}
 		}
 
@@ -226,12 +225,12 @@ func (idx *Index) write(dst io.Writer) error {
 
 		// Digest
 		_, _ = w.WriteString("\t\t")
-		b := buf(w, digestHex+1)[:digestHex]
+		b := buf(w, digestHex)[:digestHex]
 		hex.Encode(b, g[0].Digest[:])
-		_, _ = w.Write(append(b, '\t'))
+		_, _ = w.Write(b)
 
 		// Size
-		b = buf(w, len("18446744073709551615"))
+		b = append(buf(w, len("\t18446744073709551615")), '\t')
 		_, _ = w.Write(strconv.AppendUint(b, uint64(g[0].Size), 10))
 		if err := w.WriteByte('\n'); err != nil {
 			return err
@@ -249,13 +248,15 @@ func (idx *Index) writeHeader(w *bufio.Writer) {
 }
 
 // Root returns the index root directory.
-func (idx *Index) Root() string {
-	return idx.root
-}
+func (idx *Index) Root() string { return idx.root }
 
-// All returns all files.
-func (idx *Index) All() Files {
-	all := make(Files, 0, len(idx.groups))
+// Files returns all files.
+func (idx *Index) Files() Files {
+	var n int
+	for _, g := range idx.groups {
+		n += len(g)
+	}
+	all := make(Files, 0, n)
 	for _, g := range idx.groups {
 		all = append(all, g...)
 	}
@@ -263,21 +264,20 @@ func (idx *Index) All() Files {
 	return all
 }
 
-// groupByDigest combines files with identical digests into groups. The returned
-// slice is sorted by the first file in each group.
+// groupByDigest combines files with identical digests into groups. The relative
+// file order within each group is preserved.
 func groupByDigest(all Files) []Files {
 	type group struct {
 		i int
 		f Files
 	}
-	all.Sort()
 	idx := make(map[Digest]group, len(all))
 	for i, f := range all {
 		g, ok := idx[f.Digest]
 		if !ok {
 			g.i = i
 		} else if g.f[0].Size != f.Size {
-			panic(fmt.Sprintf("index: hash collision: %q != %q", g.f[0].Path, f.Path))
+			panic(fmt.Sprintf("index: digest collision: %q != %q", g.f[0].Path, f.Path))
 		}
 		g.f = append(g.f, f)
 		idx[f.Digest] = g
@@ -311,7 +311,7 @@ func unsafeString(b []byte) string {
 // tabWidth is a power-of-2 tab character alignment.
 const tabWidth = 1 << 3
 
-// width returns the rendered monospace width of s with tab alignment.
+// width returns the rendered monospace width of s with proper tab alignment.
 func width(s string) (n int) {
 	for {
 		i := strings.IndexByte(s, '\t')
