@@ -5,14 +5,9 @@ import (
 	"math"
 	"runtime"
 	"sort"
+	"strings"
 	"sync"
 )
-
-// Directory names that should be treated as monolithic.
-var monolith = map[string]struct{}{
-	".git": {},
-	".svn": {},
-}
 
 // Tree is a directory tree representation of the index.
 type Tree struct {
@@ -20,8 +15,18 @@ type Tree struct {
 	idx  map[Digest]Files
 }
 
-// ToTree creates a tree representation of the file system index.
-func (idx *Index) ToTree() *Tree {
+// Dir is a directory in the file system.
+type Dir struct {
+	Path
+	Dirs  Dirs
+	Files Files
+}
+
+// Dirs is an ordered list of directories.
+type Dirs []*Dir
+
+// Tree creates a tree representation of the index.
+func (idx *Index) Tree() *Tree {
 	t := &Tree{
 		dirs: make(map[Path]*Dir, len(idx.groups)),
 		idx:  make(map[Digest]Files, len(idx.groups)),
@@ -38,11 +43,18 @@ func (idx *Index) ToTree() *Tree {
 		}
 	}
 
-	// Replace Dir entries for monolith directories
-	var subdirs Dirs
-	for p, d := range t.dirs {
-		if _, ok := monolith[p.Base()]; !ok || p != d.Path {
+	// Replace child Dir entries for monolith directories
+	subdirs := make(Dirs, 0, 8)
+dirs:
+	for name, d := range t.dirs {
+		if d.Path != name || !isMonolith(name.Base()) {
 			continue
+		}
+		// Ensure that this is the topmost monolith
+		for p := name.Dir(); p != Root; p = p.Dir() {
+			if isMonolith(p.Base()) {
+				continue dirs
+			}
 		}
 		subdirs = d.appendSubdirs(subdirs[:0])
 		d.Dirs = nil
@@ -56,34 +68,33 @@ func (idx *Index) ToTree() *Tree {
 		}
 	}
 
+	// Sort directories and files
 	for _, d := range t.dirs {
 		sort.Slice(d.Dirs, func(i, j int) bool {
 			return d.Dirs[i].Base() < d.Dirs[j].Base()
 		})
-		sort.Slice(d.Files, func(i, j int) bool {
-			return d.Files[i].Base() < d.Files[j].Base()
-		})
+		d.Files.Sort()
 	}
 	return t
 }
 
-// addFile adds file f to the tree, creating all required directory entries.
+// addFile adds file f to the tree, creating all required parent directories.
 func (t *Tree) addFile(f *File) {
-	p := f.Dir()
-	if d, ok := t.dirs[p]; ok {
-		d.Files = append(d.Files, f)
+	name := f.Dir()
+	if p, ok := t.dirs[name]; ok {
+		p.Files = append(p.Files, f)
 		return
 	}
-	dir := &Dir{Path: p, Files: Files{f}}
-	t.dirs[p] = dir
-	for dir.Path != Root {
-		p := dir.Dir()
-		if d, ok := t.dirs[p]; ok {
-			d.Dirs = append(d.Dirs, dir)
+	d := &Dir{Path: name, Files: Files{f}}
+	t.dirs[name] = d
+	for name != Root {
+		name = d.Dir()
+		if p, ok := t.dirs[name]; ok {
+			p.Dirs = append(p.Dirs, d)
 			break
 		}
-		dir = &Dir{Path: p, Dirs: Dirs{dir}}
-		t.dirs[p] = dir
+		d = &Dir{Path: name, Dirs: Dirs{d}}
+		t.dirs[name] = d
 	}
 }
 
@@ -168,7 +179,7 @@ next:
 		clear(dirs)
 		for _, d := range subtree {
 			for _, f := range d.Files {
-				if f.Path.Base() == "Thumbs.db" {
+				if canIgnore(f.Base()) {
 					continue
 				}
 				for _, dup := range t.idx[f.Digest] {
@@ -224,16 +235,6 @@ next:
 	}
 }
 
-// Dir is a directory in the file system.
-type Dir struct {
-	Path
-	Dirs  Dirs
-	Files Files
-}
-
-// Dirs is an ordered list of directories.
-type Dirs []*Dir
-
 // appendSubdirs appends all direct and indirect subdirectories of d to dirs in
 // breadth-first order.
 func (d *Dir) appendSubdirs(dirs Dirs) Dirs {
@@ -242,4 +243,20 @@ func (d *Dir) appendSubdirs(dirs Dirs) Dirs {
 		dirs = append(dirs, dirs[i].Dirs...)
 	}
 	return dirs
+}
+
+// isMonolith returns whether dir is a monolithic directory name.
+func isMonolith(dir string) bool {
+	switch dir {
+	case ".git", ".svn":
+		return true
+	default:
+		return false
+	}
+}
+
+// canIgnore returns whether the specified file name can be ignored.
+func canIgnore(name string) bool {
+	return strings.EqualFold(name, "Thumbs.db") ||
+		strings.EqualFold(name, "desktop.ini")
 }
