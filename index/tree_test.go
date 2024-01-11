@@ -25,10 +25,28 @@ func TestTree(t *testing.T) {
 		groups: []Files{{a1, a2, a3}, {b1, b2}, {c1, c2}, {x1}, {y1}},
 	}
 
-	GIT := &Dir{
-		Path:  Path{"C/.git/"},
-		Files: Files{y1, x1},
+	Z := &Dir{
+		Path:  Path{"C/.git/X/.git/Z/"},
+		Files: Files{y1},
 	}
+	GIT2 := &Dir{
+		Path: Path{"C/.git/X/.git/"},
+		Dirs: Dirs{Z},
+	}
+	X := &Dir{
+		Path:  Path{"C/.git/X/"},
+		Dirs:  Dirs{GIT2},
+		Files: Files{x1},
+	}
+	GIT1 := &Dir{
+		Path: Path{"C/.git/"},
+		Dirs: Dirs{X},
+	}
+	GIT1.Atom = GIT1
+	X.Atom = GIT1
+	GIT2.Atom = GIT1
+	Z.Atom = GIT1
+
 	F := &Dir{
 		Path:  Path{"C/F/"},
 		Files: Files{c2},
@@ -43,7 +61,7 @@ func TestTree(t *testing.T) {
 	}
 	C := &Dir{
 		Path:  Path{"C/"},
-		Dirs:  Dirs{GIT, D, F},
+		Dirs:  Dirs{GIT1, D, F},
 		Files: Files{c1},
 	}
 	B := &Dir{
@@ -63,17 +81,17 @@ func TestTree(t *testing.T) {
 
 	want := &Tree{
 		dirs: map[Path]*Dir{
-			Root:                     root,
-			A.Path:                   A,
-			B.Path:                   B,
-			C.Path:                   C,
-			D.Path:                   D,
-			E.Path:                   E,
-			F.Path:                   F,
-			GIT.Path:                 GIT,
-			Path{"C/.git/X/"}:        GIT,
-			Path{"C/.git/X/.git/"}:   GIT,
-			Path{"C/.git/X/.git/Z/"}: GIT,
+			Root:      root,
+			A.Path:    A,
+			B.Path:    B,
+			C.Path:    C,
+			D.Path:    D,
+			E.Path:    E,
+			F.Path:    F,
+			GIT1.Path: GIT1,
+			X.Path:    X,
+			GIT2.Path: GIT2,
+			Z.Path:    Z,
 		},
 		idx: map[Digest]Files{
 			d1: {a1, a2, a3},

@@ -20,6 +20,7 @@ type Dir struct {
 	Path
 	Dirs  Dirs
 	Files Files
+	Atom  *Dir
 }
 
 // Dirs is an ordered list of directories.
@@ -43,28 +44,14 @@ func (idx *Index) Tree() *Tree {
 		}
 	}
 
-	// Replace child Dir entries for monolith directories
-	subdirs := make(Dirs, 0, 8)
-dirs:
-	for name, d := range t.dirs {
-		if d.Path != name || !isMonolith(name.Base()) {
+	// Update atomic directories
+	subtree := make(dirStack, 0, 16)
+	for _, d := range t.dirs {
+		if d.Atom != nil || !isAtomic(d.Base()) {
 			continue
 		}
-		// Ensure that this is the topmost monolith
-		for p := name.Dir(); p != Root; p = p.Dir() {
-			if isMonolith(p.Base()) {
-				continue dirs
-			}
-		}
-		subdirs = d.appendSubdirs(subdirs[:0])
-		d.Dirs = nil
-		for _, sd := range subdirs {
-			if _, ok := t.dirs[sd.Path]; !ok {
-				panic(fmt.Sprint("index: missing directory: ", sd.Path))
-			}
-			d.Files = append(d.Files, sd.Files...)
-			sd.Dirs, sd.Files = nil, nil
-			t.dirs[sd.Path] = d
+		for subtree = append(subtree[:0], d); len(subtree) > 0; {
+			subtree.next().Atom = d
 		}
 	}
 
@@ -169,16 +156,15 @@ func (t *Tree) Dups() []*Dup {
 // directory received from next.
 func (t *Tree) findDups(next <-chan *Dir, todo chan<- Dirs, dup chan<- *Dup, wg *sync.WaitGroup) {
 	defer wg.Done()
-	var subtree Dirs
 	safe := make(map[Digest]bool)
 	dirs := make(map[Path]int)
+	subtree := make(dirStack, 0, 16)
 next:
 	for root := range next {
-		subtree = root.appendSubdirs(append(subtree[:0], root))
 		clear(safe)
 		clear(dirs)
-		for _, d := range subtree {
-			for _, f := range d.Files {
+		for subtree = append(subtree[:0], root); len(subtree) > 0; {
+			for _, f := range subtree.next().Files {
 				if canIgnore(f.Base()) {
 					continue
 				}
@@ -235,18 +221,20 @@ next:
 	}
 }
 
-// appendSubdirs appends all direct and indirect subdirectories of d to dirs in
-// breadth-first order.
-func (d *Dir) appendSubdirs(dirs Dirs) Dirs {
-	i := len(dirs)
-	for dirs = append(dirs, d.Dirs...); i < len(dirs); i++ {
-		dirs = append(dirs, dirs[i].Dirs...)
+// dirStack is a stack of directories that are visited in depth-first order.
+type dirStack Dirs
+
+func (s *dirStack) next() (d *Dir) {
+	i := len(*s) - 1
+	d, *s = (*s)[i], (*s)[:i]
+	for i := len(d.Dirs) - 1; i >= 0; i-- {
+		*s = append(*s, d.Dirs[i])
 	}
-	return dirs
+	return
 }
 
-// isMonolith returns whether dir is a monolithic directory name.
-func isMonolith(dir string) bool {
+// isAtomic returns whether dir is an atomic directory name.
+func isAtomic(dir string) bool {
 	switch dir {
 	case ".git", ".svn":
 		return true
