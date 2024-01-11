@@ -44,23 +44,20 @@ func (idx *Index) Tree() *Tree {
 		}
 	}
 
-	// Update atomic directories
-	subtree := make(dirStack, 0, 16)
-	for _, d := range t.dirs {
-		if d.Atom != nil || !isAtomic(d.Base()) {
-			continue
-		}
-		for subtree = append(subtree[:0], d); len(subtree) > 0; {
-			subtree.next().Atom = d
-		}
-	}
-
-	// Sort directories and files
+	// Sort directories and files, and find atomic directories
+	s := make(dirStack, 0, 16)
 	for _, d := range t.dirs {
 		sort.Slice(d.Dirs, func(i, j int) bool {
 			return d.Dirs[i].Base() < d.Dirs[j].Base()
 		})
-		d.Files.Sort()
+		sort.Slice(d.Files, func(i, j int) bool {
+			return d.Files[i].Base() < d.Files[j].Base()
+		})
+		if d.Atom == nil && isAtomic(d.Base()) {
+			for s = append(s[:0], d); len(s) > 0; {
+				s.next().Atom = d
+			}
+		}
 	}
 	return t
 }
@@ -158,13 +155,13 @@ func (t *Tree) findDups(next <-chan *Dir, todo chan<- Dirs, dup chan<- *Dup, wg 
 	defer wg.Done()
 	safe := make(map[Digest]bool)
 	dirs := make(map[Path]int)
-	subtree := make(dirStack, 0, 16)
+	s := make(dirStack, 0, 16)
 next:
 	for root := range next {
 		clear(safe)
 		clear(dirs)
-		for subtree = append(subtree[:0], root); len(subtree) > 0; {
-			for _, f := range subtree.next().Files {
+		for s = append(s[:0], root); len(s) > 0; {
+			for _, f := range s.next().Files {
 				if canIgnore(f.Base()) {
 					continue
 				}
@@ -184,7 +181,7 @@ next:
 			}
 		}
 		used := 0
-		for _, d := range subtree {
+		for _, d := range s {
 			for _, f := range d.Files {
 				if !safe[f.Digest] {
 					continue
