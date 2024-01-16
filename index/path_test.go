@@ -24,6 +24,8 @@ func TestPathContains(t *testing.T) {
 	assert.True(t, Root.Contains(Root))
 	assert.True(t, Root.Contains(Path{"a"}))
 	assert.True(t, Root.Contains(Path{"a/"}))
+	assert.False(t, Path{}.Contains(Root))
+	assert.False(t, Path{}.Contains(Path{"a"}))
 	assert.False(t, Path{"a"}.Contains(Path{"a"}))
 	assert.False(t, Path{"a/a"}.Contains(Path{"a/a"}))
 	assert.False(t, Path{"a/"}.Contains(Root))

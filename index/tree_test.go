@@ -26,21 +26,25 @@ func TestTree(t *testing.T) {
 	}
 
 	Z := &Dir{
-		Path:  Path{"C/.git/X/.git/Z/"},
-		Files: Files{y1},
+		Path:        Path{"C/.git/X/.git/Z/"},
+		Files:       Files{y1},
+		UniqueFiles: 1, // y1
 	}
 	GIT2 := &Dir{
-		Path: Path{"C/.git/X/.git/"},
-		Dirs: Dirs{Z},
+		Path:        Path{"C/.git/X/.git/"},
+		Dirs:        Dirs{Z},
+		UniqueFiles: 1, // y1
 	}
 	X := &Dir{
-		Path:  Path{"C/.git/X/"},
-		Dirs:  Dirs{GIT2},
-		Files: Files{x1},
+		Path:        Path{"C/.git/X/"},
+		Dirs:        Dirs{GIT2},
+		Files:       Files{x1},
+		UniqueFiles: 2, // x1, y1
 	}
 	GIT1 := &Dir{
-		Path: Path{"C/.git/"},
-		Dirs: Dirs{X},
+		Path:        Path{"C/.git/"},
+		Dirs:        Dirs{X},
+		UniqueFiles: 2, // x1, y1
 	}
 	GIT1.Atom = GIT1
 	X.Atom = GIT1
@@ -48,35 +52,42 @@ func TestTree(t *testing.T) {
 	Z.Atom = GIT1
 
 	F := &Dir{
-		Path:  Path{"C/F/"},
-		Files: Files{c2},
+		Path:        Path{"C/F/"},
+		Files:       Files{c2},
+		UniqueFiles: 1, // c2
 	}
 	E := &Dir{
-		Path:  Path{"C/D/E/"},
-		Files: Files{b2},
+		Path:        Path{"C/D/E/"},
+		Files:       Files{b2},
+		UniqueFiles: 1, // b2
 	}
 	D := &Dir{
-		Path: Path{"C/D/"},
-		Dirs: Dirs{E},
+		Path:        Path{"C/D/"},
+		Dirs:        Dirs{E},
+		UniqueFiles: 1, // b2,
 	}
 	C := &Dir{
-		Path:  Path{"C/"},
-		Dirs:  Dirs{GIT1, D, F},
-		Files: Files{c1},
+		Path:        Path{"C/"},
+		Dirs:        Dirs{GIT1, D, F},
+		Files:       Files{c1},
+		UniqueFiles: 4, // b2, c[12], x1, y1
 	}
 	B := &Dir{
-		Path:  Path{"A/B/"},
-		Files: Files{a3},
+		Path:        Path{"A/B/"},
+		Files:       Files{a3},
+		UniqueFiles: 1, // a3
 	}
 	A := &Dir{
-		Path:  Path{"A/"},
-		Dirs:  Dirs{B},
-		Files: Files{a2, b1},
+		Path:        Path{"A/"},
+		Dirs:        Dirs{B},
+		Files:       Files{a2, b1},
+		UniqueFiles: 2, // a[23], b1
 	}
 	root := &Dir{
-		Path:  Root,
-		Dirs:  Dirs{A, C},
-		Files: Files{a1},
+		Path:        Root,
+		Dirs:        Dirs{A, C},
+		Files:       Files{a1},
+		UniqueFiles: 5,
 	}
 
 	want := &Tree{
@@ -103,8 +114,44 @@ func TestTree(t *testing.T) {
 	}
 
 	have := idx.Tree()
-	for k, v := range want.dirs {
-		require.Equal(t, v, have.dirs[k], "%s", k)
-	}
+	mapEqual(t, want.dirs, have.dirs)
+	mapEqual(t, want.idx, have.idx)
 	assert.Equal(t, want, have)
+}
+
+func TestDedup(t *testing.T) {
+	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
+	file := func(d Digest, p string) *File { return &File{Digest: d, Size: 1, Path: Path{p}} }
+
+	a1 := file(d1, "A/a1")
+	b1 := file(d2, "A/b1")
+	c1 := file(d3, "A/c1")
+	a2 := file(d1, "B/a2")
+	b2 := file(d2, "B/b2")
+	c2 := file(d3, "B/c2")
+
+	idx := Index{
+		root:   "/",
+		groups: []Files{{a1, a2}, {b1, b2}, {c1, c2}},
+	}
+
+	tree := idx.Tree()
+	want := []*Dup{{
+		Dir: tree.dirs[Path{"A/"}],
+		Alt: Dirs{tree.dirs[Path{"B/"}]},
+	}, {
+		Dir: tree.dirs[Path{"B/"}],
+		Alt: Dirs{tree.dirs[Path{"A/"}]},
+	}}
+
+	assert.Equal(t, want, tree.Dups(Root, -1))
+}
+
+func mapEqual[K comparable, V any](t *testing.T, want, have map[K]V) {
+	for k, v := range want {
+		require.Equal(t, v, have[k], "%+v", k)
+	}
+	for k, v := range have {
+		require.Equal(t, want[k], v, "%+v", k)
+	}
 }

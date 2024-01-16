@@ -25,7 +25,7 @@ func (cmd *dupCmd) Main(args []string) error {
 		return err
 	}
 	t := idx.Tree()
-	for _, dup := range t.Dups() {
+	for _, dup := range t.Dups(index.Root, 0) {
 		fmt.Println(dup.Dir.Path)
 		for _, mir := range dup.Alt {
 			fmt.Printf("\t%s\n", mir.Path)

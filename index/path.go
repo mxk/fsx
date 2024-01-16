@@ -17,8 +17,20 @@ var Root = Path{"."}
 // filePath wraps a path to a file. It panics if the path is not a file, not
 // slash-separated, or not clean.
 func filePath(p string) Path {
-	if p == "." || path.Clean(filepath.ToSlash(p)) != p {
+	if p == "." || path.Clean(filepath.ToSlash(p)) != p || filepath.IsAbs(p) {
 		panic(fmt.Sprintf("index: non-clean or non-file path: %s", p))
+	}
+	return Path{p}
+}
+
+// dirPath wraps a path to a directory.
+func dirPath(p string) Path {
+	c := path.Clean(filepath.ToSlash(p))
+	if c == "." {
+		return Root
+	}
+	if len(p) != len(c)+1 || p[:len(c)] != c || p[len(p)-1] != '/' {
+		p = c + "/"
 	}
 	return Path{p}
 }
@@ -40,14 +52,14 @@ func (p Path) Contains(other Path) bool {
 
 // Dir returns the parent directory of p.
 func (p Path) Dir() Path {
-	switch i := strings.LastIndexByte(p.p[:len(p.p)-1], '/'); i {
-	case -1:
-		return Root
-	case 0:
-		panic(fmt.Sprintf("index: rooted path: %s", p))
-	default:
+	i := strings.LastIndexByte(p.p[:len(p.p)-1], '/')
+	if i > 0 {
 		return Path{p.p[:i+1]}
 	}
+	if i < 0 {
+		return Root
+	}
+	panic(fmt.Sprintf("index: rooted path: %s", p))
 }
 
 // Base returns the last element of p.
