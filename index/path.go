@@ -110,3 +110,61 @@ func (p Path) less(other Path) bool {
 	// shorter. Otherwise, a is a file and b is a directory.
 	return (a[len(a)-1] == '/' || bSep < 0) != invert
 }
+
+// steps iterates over every step in a Path.
+type steps struct {
+	Path
+	n int
+}
+
+// next returns the next step in s or (Path{}, false) if the last step was
+// reached. It does not return the root directory.
+func (s *steps) next() (Path, bool) {
+	if s.n >= len(s.p) || s.Path == Root {
+		return Path{}, false
+	}
+	if i := strings.IndexByte(s.p[s.n:], '/'); i > 0 {
+		s.n += i + 1
+	} else if s.n = len(s.p); i == 0 {
+		panic(fmt.Sprintf("index: rooted or non-clean path: %s", s)) // Shouldn't happen
+	}
+	return Path{s.p[:s.n]}, true
+}
+
+// skip causes next to return the step after p if p is a parent of the final
+// path (p.Contains(s.Path) == true) and hasn't been returned yet.
+func (s *steps) skip(p Path) {
+	if s.n < len(p.p) && len(p.p) <= len(s.p) &&
+		s.p[:len(p.p)] == p.p && p.p[len(p.p)-1] == '/' {
+		s.n = len(p.p)
+	}
+}
+
+// uniqueDirs visits all unique directories in a set of paths.
+type uniqueDirs []steps
+
+// add adds path p to the set.
+func (u *uniqueDirs) add(p Path) { *u = append(*u, steps{Path: p}) }
+
+// clear removes all paths from the set.
+func (u *uniqueDirs) clear() { *u = (*u)[:0] }
+
+// forEach calls fn for each unique directory in the set, leaving the set empty.
+// For example, if the set contains paths "A/B/", "A/C/", and "D/", fn will be
+// called for Root, "A/", "A/B/", "A/C/", and "D/".
+func (u *uniqueDirs) forEach(fn func(Path)) {
+	defer u.clear()
+	if len(*u) > 0 {
+		fn(Root)
+	}
+	for len(*u) > 0 {
+		if p, ok := (*u)[0].next(); ok {
+			fn(p)
+			for i := 1; i < len(*u); i++ {
+				(*u)[i].skip(p)
+			}
+		} else {
+			*u = append((*u)[:0], (*u)[1:]...)
+		}
+	}
+}

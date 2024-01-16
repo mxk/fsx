@@ -92,3 +92,98 @@ func TestPathLess(t *testing.T) {
 	assert.False(t, Path{"a/"}.less(Path{"a/"}))
 	assert.False(t, Path{"a/b"}.less(Path{"a/b"}))
 }
+
+func TestSteps(t *testing.T) {
+	tests := []struct {
+		path string
+		skip string
+		want []string
+	}{
+		// next
+		{"", "", nil},
+		{".", "", nil},
+		{"a", "", []string{"a"}},
+		{"a/", "", []string{"a/"}},
+		{"a/b", "", []string{"a/", "a/b"}},
+		{"a/bc/", "", []string{"a/", "a/bc/"}},
+		{"a/bc/def/ghi", "", []string{"a/", "a/bc/", "a/bc/def/", "a/bc/def/ghi"}},
+
+		// skip
+		{"a", "a", []string{"a"}},
+		{"a", "a/", []string{"a"}},
+		{"a/b/c", "x/", []string{"a/", "a/b/", "a/b/c"}},
+		{"a/b/c", "a/", []string{"a/b/", "a/b/c"}},
+		{"a/b/c", "a/b", []string{"a/", "a/b/", "a/b/c"}},
+		{"a/b/c/", "a/b/", []string{"a/b/c/"}},
+		{"a/b/c/", "a/b/c/", nil},
+	}
+	for _, tc := range tests {
+		s := steps{Path: Path{tc.path}}
+		if tc.skip != "" {
+			s.skip(Path{tc.skip})
+		}
+		var have []string
+		for p, ok := s.next(); ok; p, ok = s.next() {
+			have = append(have, p.p)
+		}
+		assert.Equal(t, tc.want, have, "%+v", tc)
+	}
+	for i := range [3]struct{}{} {
+		s := steps{Path: Path{"a/b/c/d/"}}
+		if p, ok := s.next(); assert.True(t, ok) {
+			assert.Equal(t, Path{"a/"}, p)
+		}
+		switch i {
+		case 0:
+			s.skip(Path{"a/b/c/"})
+		case 1:
+			s.skip(Path{"a/b/"})
+			s.skip(Path{"a/b/c/"})
+		case 2:
+			s.skip(Path{"a/b/c/"})
+			s.skip(Path{"a/b/c/d/e/"})
+			s.skip(Path{"a/b/"})
+		}
+		if p, ok := s.next(); assert.True(t, ok, "%v", i) {
+			assert.Equal(t, Path{"a/b/c/d/"}, p, "%v", i)
+		}
+	}
+	assert.Panics(t, func() { (&steps{Path: Path{"/a"}}).next() })
+	assert.Panics(t, func() {
+		s := steps{Path: Path{"a//b"}}
+		if p, ok := s.next(); assert.True(t, ok) {
+			assert.Equal(t, Path{"a/"}, p)
+		}
+		s.next()
+	})
+}
+
+func TestUniqueDirs(t *testing.T) {
+	var u uniqueDirs
+	u.add(dirPath("A/"))
+	u.add(dirPath("X/Y/Z/"))
+	u.add(dirPath("A/B/C/D/"))
+	u.add(dirPath("A/B/C/"))
+	u.add(dirPath("X/Z/"))
+	u.add(Root)
+	u.add(dirPath("A/B/"))
+	u.add(dirPath("A/B/E/"))
+	u.add(dirPath("A/B/C/D/"))
+	want := []Path{
+		Root,
+		{"A/"},
+		{"X/"},
+		{"X/Y/"},
+		{"X/Y/Z/"},
+		{"A/B/"},
+		{"A/B/C/"},
+		{"A/B/C/D/"},
+		{"X/Z/"},
+		{"A/B/E/"},
+	}
+	var have []Path
+	u.forEach(func(p Path) { have = append(have, p) })
+	assert.Equal(t, want, have)
+	assert.Empty(t, u)
+	u.forEach(func(p Path) { panic("fail") })
+}
