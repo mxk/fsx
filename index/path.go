@@ -67,6 +67,21 @@ func (p Path) Base() string {
 	return path.Base(p.p)
 }
 
+// Dist returns the distance between two paths in terms of directories traversed
+// to go from one to the other.
+func (p Path) Dist(other Path) int {
+	// Strip common prefix
+	for {
+		i, j := strings.IndexByte(p.p, '/'), strings.IndexByte(other.p, '/')
+		if i != j || i < 0 || p.p[:i] != other.p[:i] {
+			break
+		}
+		p.p, other.p = p.p[i+1:], other.p[i+1:]
+	}
+	// Count directories
+	return strings.Count(p.p, "/") + strings.Count(other.p, "/")
+}
+
 // less returns whether path p should be sorted before other. Directories are
 // sorted before files.
 func (p Path) less(other Path) bool {

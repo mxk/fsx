@@ -144,7 +144,7 @@ func TestDedup(t *testing.T) {
 		Alt: Dirs{tree.dirs[Path{"A/"}]},
 	}}
 
-	assert.Equal(t, want, tree.Dups(Root, -1))
+	assert.Equal(t, want, tree.Dups(Root, -1, 0))
 }
 
 func mapEqual[K comparable, V any](t *testing.T, want, have map[K]V) {

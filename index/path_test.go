@@ -54,6 +54,29 @@ func TestPathDirBase(t *testing.T) {
 	assert.Panics(t, func() { Path{"/a"}.Dir() })
 }
 
+func TestPathDist(t *testing.T) {
+	tests := []struct {
+		a, b string
+		dist int
+	}{
+		{".", ".", 0},
+		{"a/", ".", 1},
+		{"a/", "a/", 0},
+		{"a/b", "a/", 0},
+		{"a/b", "a/c", 0},
+		{"a/b/", "a/", 1},
+		{"a/", "b/", 2},
+		{"a/b/", "a/c/", 2},
+		{"a/b/", "b/c/", 4},
+		{"a/b/c/", "a/b/d", 1},
+		{"a/b/c/", "a/b/d/", 2},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.dist, Path{tc.a}.Dist(Path{tc.b}), "%q", tc)
+		assert.Equal(t, tc.dist, Path{tc.b}.Dist(Path{tc.a}), "%q", tc)
+	}
+}
+
 func TestPathLess(t *testing.T) {
 	less := []struct{ a, b string }{
 		{".", "!"},
@@ -126,7 +149,7 @@ func TestSteps(t *testing.T) {
 		for p, ok := s.next(); ok; p, ok = s.next() {
 			have = append(have, p.p)
 		}
-		assert.Equal(t, tc.want, have, "%+v", tc)
+		assert.Equal(t, tc.want, have, "%q", tc)
 	}
 	for i := range [3]struct{}{} {
 		s := steps{Path: Path{"a/b/c/d/"}}

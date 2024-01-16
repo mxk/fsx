@@ -52,7 +52,7 @@ func (idx *Index) Tree() *Tree {
 		t.idx[g[0].Digest] = g
 		for _, f := range g {
 			t.addFile(f)
-			dirs.add(f.Dir())
+			dirs.add(f.Dir()) // TODO: Don't count files that are ignored?
 		}
 		dirs.forEach(func(p Path) { t.dirs[p].UniqueFiles++ })
 	}
@@ -108,33 +108,35 @@ func (t *Tree) addFile(f *File) {
 	}
 }
 
-// Dir returns the specified directory if it exists.
+// Dir returns the specified directory, if it exists.
 func (t *Tree) Dir(name string) *Dir {
 	return t.dirs[dirPath(name)]
 }
 
-// Dups returns directories under dir that contain duplicate data. If max is >
-// 0, at most that many directories are returned.
-func (t *Tree) Dups(dir Path, max int) []*Dup {
+// Dups returns directories under dir that contain duplicate data. If maxDups is
+// > 0, at most that many directories are returned. maxLost is the maximum
+// number of files that can be lost for a directory to still be considered a
+// duplicate.
+func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	root, ok := t.dirs[dir]
 	if !ok || len(root.Dirs) == 0 {
 		return nil
 	}
 	queue := []Dirs{root.Dirs}
 
-	// Directories are sent to workers via next. If it's a duplicate, it is
-	// returned via dup. Otherwise, its subdirectories are returned via dirs.
+	// Directories are sent to workers via next. Duplicates are returned via
+	// dup. Subdirectories of non-duplicates are returned via dirs.
 	next := make(chan *Dir, runtime.NumCPU())
 	dup := make(chan *Dup, 1)
 	dirs := make(chan Dirs, 1)
 	var wg sync.WaitGroup
 	wg.Add(len(queue[0]))
-	for i := 0; i < cap(next); i++ {
+	for n := cap(next); n > 0; n-- {
 		go func(next <-chan *Dir, dup chan<- *Dup, dirs chan<- Dirs) {
 			defer wg.Done()
 			dd := t.newDedup()
 			for root := range next {
-				if d := dd.dedup(root); d != nil {
+				if d := dd.dedup(root, maxLost); d != nil {
 					dup <- d
 				} else {
 					dirs <- root.Dirs
@@ -170,26 +172,30 @@ func (t *Tree) Dups(dir Path, max int) []*Dup {
 		select {
 		case d, ok := <-dup:
 			if !ok {
+				// All workers have returned
 				sort.Slice(dups, func(i, j int) bool {
 					return dups[i].Path.less(dups[j].Path)
 				})
-				if max <= 0 || len(dups) < max {
-					max = len(dups)
+				if maxDups <= 0 || len(dups) < maxDups {
+					maxDups = len(dups)
 				}
-				return dups[:max:len(dups)]
+				return dups[:maxDups:len(dups)]
 			}
-			if dups = append(dups, d); len(dups) == max {
-				for _, q := range queue {
-					wg.Add(-len(q))
-				}
+			if dups = append(dups, d); len(dups) == maxDups {
+				// Cancel all remaining work
+				var n int
 				for queue != nil {
 					select {
 					case <-next:
-						wg.Done()
+						n++
 					default:
+						for _, q := range queue {
+							n += len(q)
+						}
 						queue = nil
 					}
 				}
+				wg.Add(-n)
 			}
 		case d := <-dirs:
 			if len(d) > 0 && queue != nil {
@@ -201,20 +207,20 @@ func (t *Tree) Dups(dir Path, max int) []*Dup {
 	}
 }
 
-// dedup locates duplicate files in the Tree.
+// dedup locates duplicate directories in the Tree.
 type dedup struct {
-	*Tree
-	subtree   dirStack
-	ignored   Files
-	safe      map[Digest]struct{}
-	lost      map[Digest]struct{}
-	uniqDirs  uniqueDirs
-	safeCount map[Path]int
+	Tree
+	subtree    dirStack
+	ignored    Files
+	safe       map[Digest]struct{}
+	lost       map[Digest]struct{}
+	uniqueDirs uniqueDirs
+	safeCount  map[Path]int
 }
 
 func (t *Tree) newDedup() *dedup {
 	return &dedup{
-		Tree:      t,
+		Tree:      *t,
 		subtree:   make(dirStack, 0, 16),
 		safe:      make(map[Digest]struct{}),
 		lost:      make(map[Digest]struct{}),
@@ -223,7 +229,7 @@ func (t *Tree) newDedup() *dedup {
 }
 
 // dedup returns a non-nil Dup if root can be deduplicated.
-func (dd *dedup) dedup(root *Dir) *Dup {
+func (dd *dedup) dedup(root *Dir, maxLost int) *Dup {
 	if root.Atom != nil && root.Atom != root {
 		return nil
 	}
@@ -239,35 +245,29 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 				dd.ignored = append(dd.ignored, f)
 				continue
 			}
-			// TODO: Check safe and lost first?
 			for _, dup := range dd.idx[f.Digest] {
 				if !root.Contains(dup.Path) {
 					dd.safe[f.Digest] = struct{}{}
 					continue files
 				}
 			}
-			if dd.lost[f.Digest] = struct{}{}; len(dd.lost) == 10 {
+			if dd.lost[f.Digest] = struct{}{}; len(dd.lost) > maxLost {
 				return nil
 			}
 		}
 	}
-	if len(dd.lost)*len(dd.lost) > len(dd.safe) {
+
+	// Require more files to be saved than lost
+	if len(dd.safe) <= len(dd.lost)*len(dd.lost) {
 		return nil
 	}
 
-	// Set safe file counts for each alternate directory and its parents
-	clear(dd.safeCount)
-	for g := range dd.safe {
-		for _, f := range dd.idx[g] {
-			if !root.Contains(f.Path) {
-				dd.uniqDirs.add(f.Dir())
-			}
-		}
-		dd.uniqDirs.forEach(func(p Path) { dd.safeCount[p]++ })
-	}
-
-	// Record lost and ignored files
+	// Record ignored and lost files
 	dup := &Dup{Dir: root}
+	if len(dd.ignored) > 0 {
+		dup.Ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
+		dup.Ignored.Sort()
+	}
 	if len(dd.lost) > 0 {
 		dup.Lost = make(Files, 0, len(dd.lost))
 		for g := range dd.lost {
@@ -275,55 +275,66 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 		}
 		dup.Lost.Sort()
 	}
-	if len(dd.ignored) > 0 {
-		dup.Ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
-		dup.Ignored.Sort()
+
+	// Create per-directory safe file counts
+	clear(dd.safeCount)
+	for g := range dd.safe {
+		for _, f := range dd.idx[g] {
+			if !root.Contains(f.Path) {
+				dd.uniqueDirs.add(f.Dir())
+			}
+		}
+		dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
 	}
 
-	// Select alternate directories until all safe files are accounted for
+	// Select alternate directories until all safe files are accounted for. At
+	// each iteration, we select an alternate directory based on a quality
+	// score, remove all files it contains from dd.safe, decrement dd.safeCount,
+	// and repeat the process with the next best directory.
+	//
+	// Scoring is based on the total number of unique files and the ratio of
+	// desired vs. extraneous files. Directories containing root are not
+	// desirable because they make it hard to determine where the copies are.
+	// Directories closer to root are slightly preferred for easier navigation.
+	// Ties are broken by path sort order to ensure deterministic output.
 	for len(dd.safe) > 0 {
-		// Score alternate directories based on the total number of unique files
-		// and the ratio of desired vs. extraneous files. Directories containing
-		// root (e.g. ".") are not desirable because they make it hard to
-		// determine where the copies are.
-		bestScore := -math.MaxFloat64
-		var bestDir Path
+		bestScore, bestDir := -math.MaxFloat64, Path{}
 		for p, n := range dd.safeCount {
 			alt := dd.dirs[p]
 			if alt.Atom != nil {
-				alt = alt.Atom
+				alt = alt.Atom // TODO: Should n be changed?
 			}
-			score := float64(n) * (float64(n) / float64(alt.UniqueFiles))
+			score := float64(n)*(float64(1+n)/float64(1+alt.UniqueFiles)) +
+				2.0/float64(1+root.Dist(p))
 			if p.Contains(root.Path) {
 				score -= float64(len(dd.safe))
 			}
-			if bestScore < score {
+			if bestScore < score || (bestScore == score && alt.Path.less(bestDir)) {
 				bestScore, bestDir = score, alt.Path
 			}
 		}
 		if bestDir.p == "" {
-			panic("index: shouldn't happen")
+			panic("index: failed to find alternate directory") // Shouldn't happen
 		}
 
 		// Remove bestDir contents from safe and safeCount
 		for g := range dd.safe {
-			contains := false
-			for _, f := range dd.idx[g] {
+			// TODO: Iterate over bestDir files instead?
+			group := dd.idx[g]
+			for _, f := range group {
 				if bestDir.Contains(f.Path) {
-					contains = true
-					break
+					goto match
 				}
 			}
-			if !contains {
-				continue
-			}
+			continue
+		match:
 			delete(dd.safe, g)
-			for _, f := range dd.idx[g] {
+			for _, f := range group {
 				if !root.Contains(f.Path) {
-					dd.uniqDirs.add(f.Dir())
+					dd.uniqueDirs.add(f.Dir())
 				}
 			}
-			dd.uniqDirs.forEach(func(p Path) {
+			dd.uniqueDirs.forEach(func(p Path) {
 				if n := dd.safeCount[p] - 1; n > 0 {
 					dd.safeCount[p] = n
 				} else {
@@ -337,7 +348,7 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 }
 
 // dirStack is a stack of directories that are visited in depth-first order.
-type dirStack Dirs
+type dirStack Dirs // TODO: []Dirs
 
 func (s *dirStack) from(root *Dir) {
 	*s = append((*s)[:0], root)
