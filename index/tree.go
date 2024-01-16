@@ -44,17 +44,17 @@ func (idx *Index) Tree() *Tree {
 
 	// Add each file to the tree, creating all required Dir entries and updating
 	// unique file counts.
-	unique := make(uniqueVisitor, 16)
+	var dirs uniqueDirs
 	for _, g := range idx.groups {
 		if _, dup := t.idx[g[0].Digest]; dup {
 			panic(fmt.Sprintf("index: digest collision: %x", g[0].Digest))
 		}
 		t.idx[g[0].Digest] = g
-		clear(unique)
 		for _, f := range g {
 			t.addFile(f)
-			unique.parents(f.Dir(), func(p Path) { t.dirs[p].UniqueFiles++ })
+			dirs.add(f.Dir())
 		}
+		dirs.forEach(func(p Path) { t.dirs[p].UniqueFiles++ })
 	}
 
 	// Sort directories and files, and find atomic directories
@@ -195,7 +195,7 @@ type dedup struct {
 	ignored   Files
 	safe      map[Digest]struct{}
 	lost      map[Digest]struct{}
-	unique    uniqueVisitor
+	uniqDirs  uniqueDirs
 	safeCount map[Path]int
 }
 
@@ -205,7 +205,6 @@ func (t *Tree) newDedup() *dedup {
 		subtree:   make(dirStack, 0, 16),
 		safe:      make(map[Digest]struct{}),
 		lost:      make(map[Digest]struct{}),
-		unique:    make(uniqueVisitor),
 		safeCount: make(map[Path]int),
 	}
 }
@@ -246,12 +245,12 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 	// Set safe file counts for each alternate directory and its parents
 	clear(dd.safeCount)
 	for g := range dd.safe {
-		clear(dd.unique)
 		for _, f := range dd.idx[g] {
 			if !root.Contains(f.Path) {
-				dd.unique.parents(f.Dir(), func(p Path) { dd.safeCount[p]++ })
+				dd.uniqDirs.add(f.Dir())
 			}
 		}
+		dd.uniqDirs.forEach(func(p Path) { dd.safeCount[p]++ })
 	}
 
 	// Record lost and ignored files
@@ -293,8 +292,7 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 			panic("index: shouldn't happen")
 		}
 
-		// Remove files contained within the selected directory from safe files
-		// and counts.
+		// Remove bestDir contents from safe and safeCount
 		for g := range dd.safe {
 			contains := false
 			for _, f := range dd.idx[g] {
@@ -307,18 +305,18 @@ func (dd *dedup) dedup(root *Dir) *Dup {
 				continue
 			}
 			delete(dd.safe, g)
-			clear(dd.unique)
 			for _, f := range dd.idx[g] {
 				if !root.Contains(f.Path) {
-					dd.unique.parents(f.Dir(), func(p Path) {
-						if n := dd.safeCount[p] - 1; n > 0 {
-							dd.safeCount[p] = n
-						} else {
-							delete(dd.safeCount, p)
-						}
-					})
+					dd.uniqDirs.add(f.Dir())
 				}
 			}
+			dd.uniqDirs.forEach(func(p Path) {
+				if n := dd.safeCount[p] - 1; n > 0 {
+					dd.safeCount[p] = n
+				} else {
+					delete(dd.safeCount, p)
+				}
+			})
 		}
 		dup.Alt = append(dup.Alt, dd.dirs[bestDir])
 	}
@@ -341,21 +339,49 @@ func (s *dirStack) next() (d *Dir) {
 	return
 }
 
-// uniqueVisitor keeps track of visited paths.
-type uniqueVisitor map[Path]struct{}
+// uniqueDirs visits all unique directories in a set of paths.
+type uniqueDirs []steps
 
-// parents calls fn on all paths from p to Root, stopping at the first visited
-// path.
-func (v uniqueVisitor) parents(p Path, fn func(Path)) {
-	for {
-		if _, visited := v[p]; visited {
-			break
+func (u *uniqueDirs) add(p Path) { *u = append(*u, steps{Path: p}) }
+
+func (u *uniqueDirs) forEach(fn func(Path)) {
+	if len(*u) > 0 {
+		fn(Root)
+	}
+	for len(*u) > 0 {
+		if p, ok := (*u)[0].next(); ok {
+			fn(p)
+			for i := 1; i < len(*u); i++ {
+				(*u)[i].skip(p)
+			}
+		} else {
+			*u = append((*u)[:0], (*u)[1:]...)
 		}
-		v[p] = struct{}{}
-		if fn(p); p == Root {
-			break
-		}
-		p = p.Dir()
+	}
+}
+
+// steps iterates over every step in a Path.
+type steps struct {
+	Path
+	n int
+}
+
+func (s *steps) next() (Path, bool) {
+	if s.n == len(s.p) || s.Path == Root {
+		return Path{}, false
+	}
+	if i := strings.IndexByte(s.p[s.n:], '/'); i >= 0 {
+		s.n += i + 1
+	} else {
+		s.n = len(s.p)
+	}
+	return Path{s.p[:s.n]}, true
+}
+
+func (s *steps) skip(p Path) {
+	if s.n < len(p.p) && len(p.p) <= len(s.p) &&
+		s.p[:len(p.p)] == p.p && p.p[len(p.p)-1] == '/' {
+		s.n = len(p.p)
 	}
 }
 
