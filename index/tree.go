@@ -18,10 +18,10 @@ type Tree struct {
 // Dir is a directory in the file system.
 type Dir struct {
 	Path
-	Dirs        Dirs
-	Files       Files
-	Atom        *Dir
-	UniqueFiles int
+	Dirs        Dirs  // Subdirectories
+	Files       Files // Files in this directory
+	Atom        *Dir  // Atomic container directory, such as .git
+	UniqueFiles int   // Total number of direct and indirect unique files
 }
 
 // Dirs is an ordered list of directories.
@@ -30,15 +30,15 @@ type Dirs []*Dir
 // Dup is a directory that can be deleted without losing too much data.
 type Dup struct {
 	*Dir
-	Alt     Dirs  // Directories that contain copies of files in Dir
-	Lost    Files // Unique files that would be lost of Dir is deleted
-	Ignored Files // Unimportant files that may be lost
+	Alt     Dirs  // Directories that contain copies of unique files in Dir
+	Lost    Files // Unique files that would be lost if Dir is deleted
+	Ignored Files // Unimportant files that may be lost if Dir is deleted
 }
 
 // Tree creates a tree representation of the index.
 func (idx *Index) Tree() *Tree {
 	t := &Tree{
-		dirs: make(map[Path]*Dir, len(idx.groups)),
+		dirs: make(map[Path]*Dir, len(idx.groups)/8),
 		idx:  make(map[Digest]Files, len(idx.groups)),
 	}
 
@@ -58,20 +58,33 @@ func (idx *Index) Tree() *Tree {
 	}
 
 	// Sort directories and files, and find atomic directories
+	sortCh := make(chan *Dir, min(runtime.NumCPU(), 8))
+	var wg sync.WaitGroup
+	wg.Add(cap(sortCh))
+	for n := cap(sortCh); n > 0; n-- {
+		go func(sortCh <-chan *Dir) {
+			defer wg.Done()
+			for d := range sortCh {
+				sort.Slice(d.Dirs, func(i, j int) bool {
+					return d.Dirs[i].Base() < d.Dirs[j].Base()
+				})
+				sort.Slice(d.Files, func(i, j int) bool {
+					return d.Files[i].Base() < d.Files[j].Base()
+				})
+			}
+		}(sortCh)
+	}
 	subtree := make(dirStack, 0, 16)
 	for _, d := range t.dirs {
-		sort.Slice(d.Dirs, func(i, j int) bool {
-			return d.Dirs[i].Base() < d.Dirs[j].Base()
-		})
-		sort.Slice(d.Files, func(i, j int) bool {
-			return d.Files[i].Base() < d.Files[j].Base()
-		})
+		sortCh <- d
 		if d.Atom == nil && isAtomic(d.Base()) {
 			for subtree.from(d); len(subtree) > 0; {
 				subtree.next().Atom = d
 			}
 		}
 	}
+	close(sortCh)
+	wg.Wait()
 	return t
 }
 
