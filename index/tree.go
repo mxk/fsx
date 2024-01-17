@@ -74,7 +74,7 @@ func (idx *Index) Tree() *Tree {
 			}
 		}(sortCh)
 	}
-	subtree := make(dirStack, 0, 16)
+	var subtree dirStack
 	for _, d := range t.dirs {
 		sortCh <- d
 		if d.Atom == nil && isAtomic(d.Base()) {
@@ -122,7 +122,7 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	if !ok || len(root.Dirs) == 0 {
 		return nil
 	}
-	queue := []Dirs{root.Dirs}
+	queue := dirStack{root.Dirs}
 
 	// Directories are sent to workers via next. Duplicates are returned via
 	// dup. Subdirectories of non-duplicates are returned via dirs.
@@ -158,13 +158,10 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	var dups []*Dup
 	for {
 	send:
-		for i := len(queue) - 1; i >= 0; {
+		for len(queue) > 0 {
 			select {
-			case next <- queue[i][0]:
-				if queue[i] = queue[i][1:]; len(queue[i]) == 0 {
-					queue = queue[:i]
-					i--
-				}
+			case next <- queue.peek():
+				queue.pop()
 			default:
 				break send
 			}
@@ -221,7 +218,6 @@ type dedup struct {
 func (t *Tree) newDedup() *dedup {
 	return &dedup{
 		Tree:      *t,
-		subtree:   make(dirStack, 0, 16),
 		safe:      make(map[Digest]struct{}),
 		lost:      make(map[Digest]struct{}),
 		safeCount: make(map[Path]int),
@@ -348,17 +344,38 @@ func (dd *dedup) dedup(root *Dir, maxLost int) *Dup {
 }
 
 // dirStack is a stack of directories that are visited in depth-first order.
-type dirStack Dirs // TODO: []Dirs
+// Each entry must be non-empty to ensure that len(stack) > 0 implies a
+// non-empty stack.
+type dirStack []Dirs
 
+// from initializes the stack with the specified directory.
 func (s *dirStack) from(root *Dir) {
-	*s = append((*s)[:0], root)
+	*s = append((*s)[:0], Dirs{root})
 }
 
+// peek returns the next directory without removing it from the stack.
+func (s *dirStack) peek() (d *Dir) {
+	if i := len(*s) - 1; i >= 0 {
+		d = (*s)[i][0]
+	}
+	return
+}
+
+// pop returns the next directory from the stack.
+func (s *dirStack) pop() (d *Dir) {
+	if i := len(*s) - 1; i >= 0 {
+		d, (*s)[i] = (*s)[i][0], (*s)[i][1:]
+		if len((*s)[i]) == 0 {
+			*s = (*s)[:i]
+		}
+	}
+	return
+}
+
+// next returns the next directory and adds its children to the stack.
 func (s *dirStack) next() (d *Dir) {
-	i := len(*s) - 1
-	d, *s = (*s)[i], (*s)[:i]
-	for i := len(d.Dirs) - 1; i >= 0; i-- {
-		*s = append(*s, d.Dirs[i])
+	if d = s.pop(); d != nil && len(d.Dirs) > 0 {
+		*s = append(*s, d.Dirs)
 	}
 	return
 }
