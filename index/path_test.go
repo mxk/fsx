@@ -77,7 +77,7 @@ func TestPathDist(t *testing.T) {
 	}
 }
 
-func TestPathLess(t *testing.T) {
+func TestPathCmp(t *testing.T) {
 	less := []struct{ a, b string }{
 		{".", "!"},
 		{".", "a/b"},
@@ -98,8 +98,8 @@ func TestPathLess(t *testing.T) {
 		{"a/ab/", "a/a"},
 	}
 	for _, tc := range less {
-		assert.True(t, Path{tc.a}.less(Path{tc.b}), "%q", tc)
-		assert.False(t, Path{tc.b}.less(Path{tc.a}), "%q", tc)
+		assert.Equal(t, -1, Path{tc.a}.cmp(Path{tc.b}), "%q", tc)
+		assert.Equal(t, 1, Path{tc.b}.cmp(Path{tc.a}), "%q", tc)
 	}
 	panics := []struct{ a, b string }{
 		{"a/", "a"},
@@ -107,13 +107,13 @@ func TestPathLess(t *testing.T) {
 		{"a/b/c", "a/b"},
 	}
 	for _, tc := range panics {
-		assert.Panics(t, func() { Path{tc.a}.less(Path{tc.b}) }, "%q", tc)
-		assert.Panics(t, func() { Path{tc.b}.less(Path{tc.a}) }, "%q", tc)
+		assert.Panics(t, func() { Path{tc.a}.cmp(Path{tc.b}) }, "%q", tc)
+		assert.Panics(t, func() { Path{tc.b}.cmp(Path{tc.a}) }, "%q", tc)
 	}
-	assert.False(t, Root.less(Root))
-	assert.False(t, Path{"a"}.less(Path{"a"}))
-	assert.False(t, Path{"a/"}.less(Path{"a/"}))
-	assert.False(t, Path{"a/b"}.less(Path{"a/b"}))
+	assert.Zero(t, Root.cmp(Root))
+	assert.Zero(t, Path{"a"}.cmp(Path{"a"}))
+	assert.Zero(t, Path{"a/"}.cmp(Path{"a/"}))
+	assert.Zero(t, Path{"a/b"}.cmp(Path{"a/b"}))
 }
 
 func TestSteps(t *testing.T) {

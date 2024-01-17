@@ -1,6 +1,7 @@
 package index
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"path/filepath"
@@ -82,12 +83,21 @@ func (p Path) Dist(other Path) int {
 	return strings.Count(p.p, "/") + strings.Count(other.p, "/")
 }
 
-// less returns whether path p should be sorted before other. Directories are
-// sorted before files.
-func (p Path) less(other Path) bool {
+// cmp returns -1 if p < other, 0 if p == other, and +1 if p > other.
+// Directories are considered less than files.
+func (p Path) cmp(other Path) int {
+	lessIf := func(b bool) int {
+		if b {
+			return -1
+		}
+		return +1
+	}
 	a, b := p.p, other.p
 	if a == "." || b == "." {
-		return a == "." && b != "." // Root is less than all other paths
+		if a == b {
+			return 0
+		}
+		return lessIf(a == ".") // Root is less than all other paths
 	}
 	// Find the first byte mismatch
 	for i := 0; i < len(a) && i < len(b); i++ {
@@ -95,10 +105,13 @@ func (p Path) less(other Path) bool {
 			// Directory is less than a file
 			aDir := strings.IndexByte(a[i:], '/') >= 0
 			if aDir != (strings.IndexByte(b[i:], '/') >= 0) {
-				return aDir
+				return lessIf(aDir)
 			}
 			// Path separator is less than any other byte
-			return a[i] == '/' || (b[i] != '/' && a[i] < b[i])
+			if a[i] != '/' && b[i] != '/' {
+				return cmp.Compare(a[i], b[i])
+			}
+			return lessIf(a[i] == '/')
 		}
 	}
 	// One of the paths is a prefix of the other. If needed, swap the paths so
@@ -106,7 +119,7 @@ func (p Path) less(other Path) bool {
 	invert := false
 	if len(a) >= len(b) {
 		if len(a) == len(b) {
-			return false // Same path
+			return 0 // Same path
 		}
 		a, b = b, a
 		invert = true
@@ -123,7 +136,7 @@ func (p Path) less(other Path) bool {
 	// If a ends with '/', then it's a parent of b. If b does not have any more
 	// separators, then a and b are regular files in the same directory and a is
 	// shorter. Otherwise, a is a file and b is a directory.
-	return (a[len(a)-1] == '/' || bSep < 0) != invert
+	return lessIf((a[len(a)-1] == '/' || bSep < 0) != invert)
 }
 
 // steps iterates over every step in a Path.

@@ -3,11 +3,12 @@ package index
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ type Files []*File
 
 // Sort sorts files by path.
 func (fs Files) Sort() {
-	sort.Slice(fs, func(i, j int) bool { return fs[i].Path.less(fs[j].Path) })
+	slices.SortFunc(fs, func(a, b *File) int { return a.Path.cmp(b.Path) })
 }
 
 // New creates a new file index.
@@ -286,8 +287,8 @@ func groupByDigest(all Files) []Files {
 	for _, g := range idx {
 		groups = append(groups, g.f)
 	}
-	sort.Slice(groups, func(i, j int) bool {
-		return idx[groups[i][0].Digest].i < idx[groups[j][0].Digest].i
+	slices.SortFunc(groups, func(a, b Files) int {
+		return cmp.Compare(idx[a[0].Digest].i, idx[b[0].Digest].i)
 	})
 	return groups
 }

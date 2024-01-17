@@ -6,7 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/mxk/go-cli"
@@ -29,8 +29,8 @@ func (cmd *vssListCmd) Main([]string) error {
 	if err != nil {
 		return err
 	}
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].InstallDate.Before(all[j].InstallDate)
+	slices.SortFunc(all, func(a, b *vss.ShadowCopy) int {
+		return a.InstallDate.Compare(b.InstallDate)
 	})
 	w := bufio.NewWriter(os.Stdout)
 	for _, sc := range all {

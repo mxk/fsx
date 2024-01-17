@@ -1,10 +1,11 @@
 package index
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -65,11 +66,11 @@ func (idx *Index) Tree() *Tree {
 		go func(sortCh <-chan *Dir) {
 			defer wg.Done()
 			for d := range sortCh {
-				sort.Slice(d.Dirs, func(i, j int) bool {
-					return d.Dirs[i].Base() < d.Dirs[j].Base()
+				slices.SortFunc(d.Dirs, func(a, b *Dir) int {
+					return cmp.Compare(a.Base(), b.Base())
 				})
-				sort.Slice(d.Files, func(i, j int) bool {
-					return d.Files[i].Base() < d.Files[j].Base()
+				slices.SortFunc(d.Files, func(a, b *File) int {
+					return cmp.Compare(a.Base(), b.Base())
 				})
 			}
 		}(sortCh)
@@ -171,9 +172,7 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 		case d, ok := <-dup:
 			if !ok {
 				// All workers have returned
-				sort.Slice(dups, func(i, j int) bool {
-					return dups[i].Path.less(dups[j].Path)
-				})
+				slices.SortFunc(dups, func(a, b *Dup) int { return a.Path.cmp(b.Path) })
 				if maxDups <= 0 || len(dups) < maxDups {
 					maxDups = len(dups)
 				}
@@ -299,7 +298,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 			if p.Contains(root.Path) {
 				score -= float64(len(dd.safe))
 			}
-			if bestScore < score || (bestScore == score && alt.Path.less(bestDir)) {
+			if bestScore < score || (bestScore == score && alt.Path.cmp(bestDir) < 0) {
 				bestScore, bestDir = score, alt.Path
 			}
 		}
