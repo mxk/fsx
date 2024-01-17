@@ -147,6 +147,36 @@ func TestDedup(t *testing.T) {
 	assert.Equal(t, want, tree.Dups(Root, -1, 0))
 }
 
+func TestDirStack(t *testing.T) {
+	var s dirStack
+	assert.Nil(t, s.next())
+	d1, d2, d3, d4 := new(Dir), new(Dir), new(Dir), new(Dir)
+
+	s.from(d1)
+	assert.Equal(t, d1, s.next())
+	assert.Nil(t, s.next())
+
+	s.from(d1, d2)
+	assert.Equal(t, d1, s.next())
+	assert.Equal(t, d2, s.next())
+	assert.Nil(t, s.next())
+
+	d1.Dirs = append(d1.Dirs, d2, d3)
+	s.from(d1)
+	assert.Equal(t, d1, s.next())
+	assert.Equal(t, d2, s.next())
+	assert.Equal(t, d3, s.next())
+	assert.Nil(t, s.next())
+
+	d2.Dirs = append(d2.Dirs, d4)
+	s.from(d1)
+	assert.Equal(t, d1, s.next())
+	assert.Equal(t, d2, s.next())
+	assert.Equal(t, d4, s.next())
+	assert.Equal(t, d3, s.next())
+	assert.Nil(t, s.next())
+}
+
 func mapEqual[K comparable, V any](t *testing.T, want, have map[K]V) {
 	for k, v := range want {
 		require.Equal(t, v, have[k], "%+v", k)

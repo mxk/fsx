@@ -122,7 +122,8 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	if !ok || len(root.Dirs) == 0 {
 		return nil
 	}
-	queue := dirStack{root.Dirs}
+	var q dirStack
+	q.from(root.Dirs...)
 
 	// Directories are sent to workers via next. Duplicates are returned via
 	// dup. Subdirectories of non-duplicates are returned via dirs.
@@ -130,7 +131,7 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	dup := make(chan *Dup, 1)
 	dirs := make(chan Dirs, 1)
 	var wg sync.WaitGroup
-	wg.Add(len(queue[0]))
+	wg.Add(len(q))
 	for n := cap(next); n > 0; n-- {
 		go func(next <-chan *Dir, dup chan<- *Dup, dirs chan<- Dirs) {
 			defer wg.Done()
@@ -158,10 +159,10 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	var dups []*Dup
 	for {
 	send:
-		for len(queue) > 0 {
+		for len(q) > 0 {
 			select {
-			case next <- queue.peek():
-				queue.pop()
+			case next <- q[len(q)-1]:
+				q = q[:len(q)-1]
 			default:
 				break send
 			}
@@ -180,24 +181,21 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 			}
 			if dups = append(dups, d); len(dups) == maxDups {
 				// Cancel all remaining work
-				var n int
-				for queue != nil {
+				n := len(q)
+				for q != nil {
 					select {
 					case <-next:
 						n++
 					default:
-						for _, q := range queue {
-							n += len(q)
-						}
-						queue = nil
+						q = nil
 					}
 				}
 				wg.Add(-n)
 			}
 		case d := <-dirs:
-			if len(d) > 0 && queue != nil {
+			if len(d) > 0 && q != nil {
 				wg.Add(len(d))
-				queue = append(queue, d)
+				q.push(d)
 			}
 		}
 		wg.Done()
@@ -344,38 +342,33 @@ func (dd *dedup) dedup(root *Dir, maxLost int) *Dup {
 }
 
 // dirStack is a stack of directories that are visited in depth-first order.
-// Each entry must be non-empty to ensure that len(stack) > 0 implies a
-// non-empty stack.
-type dirStack []Dirs
+type dirStack Dirs
 
-// from initializes the stack with the specified directory.
-func (s *dirStack) from(root *Dir) {
-	*s = append((*s)[:0], Dirs{root})
+// from initializes the stack with the specified directories.
+func (s *dirStack) from(ds ...*Dir) {
+	if *s = (*s)[:0]; cap(*s) < len(ds) {
+		*s = make(dirStack, 0, max(2*len(ds), 16))
+	}
+	s.push(ds)
 }
 
-// peek returns the next directory without removing it from the stack.
-func (s *dirStack) peek() (d *Dir) {
-	if i := len(*s) - 1; i >= 0 {
-		d = (*s)[i][0]
+// push pushes ds in reverse order to the stack.
+func (s *dirStack) push(ds Dirs) {
+	if len(ds) <= 1 {
+		*s = append(*s, ds...)
+		return
 	}
-	return
-}
-
-// pop returns the next directory from the stack.
-func (s *dirStack) pop() (d *Dir) {
-	if i := len(*s) - 1; i >= 0 {
-		d, (*s)[i] = (*s)[i][0], (*s)[i][1:]
-		if len((*s)[i]) == 0 {
-			*s = (*s)[:i]
-		}
+	*s = append(*s, make(Dirs, len(ds))...)
+	for i, j := len(*s)-len(ds), len(ds)-1; j >= 0; i, j = i+1, j-1 {
+		(*s)[i] = ds[j]
 	}
-	return
 }
 
 // next returns the next directory and adds its children to the stack.
 func (s *dirStack) next() (d *Dir) {
-	if d = s.pop(); d != nil && len(d.Dirs) > 0 {
-		*s = append(*s, d.Dirs)
+	if i := len(*s) - 1; i >= 0 {
+		d, *s = (*s)[i], (*s)[:i]
+		s.push(d.Dirs)
 	}
 	return
 }
