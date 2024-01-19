@@ -14,6 +14,12 @@ func TestFilePath(t *testing.T) {
 	assert.Panics(t, func() { filePath("a/") })
 }
 
+func TestDirPath(t *testing.T) {
+	assert.Equal(t, ".", dirPath(".").String())
+	assert.Equal(t, "a/", dirPath("./a").String())
+	assert.Equal(t, "a/b/", dirPath("a/b/").String())
+}
+
 func TestPathIsDir(t *testing.T) {
 	assert.True(t, Root.IsDir())
 	assert.False(t, Path{"a"}.IsDir())
