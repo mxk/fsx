@@ -30,7 +30,7 @@ type File struct {
 	Digest  Digest
 	Size    int64
 	ModTime time.Time
-	Attr    Attr
+	Flag    Flag
 }
 
 // Files is an ordered list of files.

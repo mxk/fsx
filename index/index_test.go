@@ -33,16 +33,16 @@ func TestIndex(t *testing.T) {
 	want := Index{
 		root: "/",
 		groups: []Files{{
-			{Path{"d1/a"}, d1, 1, t0, attrNone},
-			{Path{"d2/a"}, d1, 1, t0, attrNone},
-			{Path{"a"}, d1, 1, t0, attrNone},
+			{Path{"d1/a"}, d1, 1, t0, flagNone},
+			{Path{"d2/a"}, d1, 1, t0, flagNone},
+			{Path{"a"}, d1, 1, t0, flagNone},
 		}, {
-			{Path{"b"}, d2, 2, t1, attrNone},
+			{Path{"b"}, d2, 2, t1, flagNone},
 		}, {
-			{Path{"c"}, d3, 3, t0, attrNone},
-			{Path{"d\t"}, d3, 3, t0, attrNone},
-			{Path{"e \t"}, d3, 3, t1, attrNone},
-			{Path{"f"}, d3, 3, t1, attrNone},
+			{Path{"c"}, d3, 3, t0, flagNone},
+			{Path{"d\t"}, d3, 3, t0, flagNone},
+			{Path{"e \t"}, d3, 3, t1, flagNone},
+			{Path{"f"}, d3, 3, t1, flagNone},
 		}},
 	}
 
