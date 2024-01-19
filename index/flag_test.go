@@ -21,11 +21,14 @@ func TestFlag(t *testing.T) {
 		{"KX", flagKeep | flagGone},
 	}
 	for _, tc := range tests {
-		assert.Equal(t, tc.f, parseFlag([]byte(tc.s)), "%q", tc)
+		f, ok := parseFlag([]byte(tc.s))
+		assert.True(t, ok)
+		assert.Equal(t, tc.f, f, "%q", tc)
 		assert.Equal(t, tc.s, tc.f.String(), "%q", tc)
 	}
 
-	assert.Panics(t, func() { _ = parseFlag([]byte("XX")) })
+	_, ok := parseFlag([]byte("XX"))
+	assert.False(t, ok)
 	assert.Panics(t, func() { _ = Flag(64).String() })
 
 	assert.True(t, flagDup.IsDup())

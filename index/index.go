@@ -86,14 +86,18 @@ func read(src io.Reader) (Index, error) {
 		ln, ok := bytes.CutPrefix(s.Bytes(), []byte("\t\t"))
 		if !ok {
 			// Flags
-			flag, ln, ok := cutByte(ln, '\t')
-			if !ok || len(flag) > 3 {
+			flagb, ln, ok := cutByte(ln, '\t')
+			if !ok {
 				return Index{}, fmt.Errorf("index: invalid entry on line %d", line)
+			}
+			flag, ok := parseFlag(flagb)
+			if !ok {
+				return Index{}, fmt.Errorf("index: invalid flag on line %d (%s)", line, flagb)
 			}
 
 			// Path and modification time
 			p, ln, _ := bytes.Cut(ln, []byte("\t//"))
-			f := &File{Path: filePath(string(p))}
+			f := &File{Path: filePath(string(p)), Flag: flag}
 			if len(ln) > 0 {
 				if err := f.ModTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
 					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
@@ -207,8 +211,9 @@ func (idx *Index) write(dst io.Writer) error {
 			}
 		}
 
-		// Paths and modification times
+		// Flags, paths, and modification times
 		for i, f := range g {
+			_, _ = w.WriteString(f.Flag.String())
 			_ = w.WriteByte('\t')
 			_, _ = w.WriteString(f.p)
 			if i == 0 || !f.ModTime.Equal(g[i-1].ModTime) {

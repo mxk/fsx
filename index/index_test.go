@@ -10,15 +10,15 @@ import (
 
 const testIdx = `fsx index v1
 /
-	d1/a	//											2009-11-10T23:00:00Z
+K	d1/a	//											2009-11-10T23:00:00Z
 	d2/a
 	a
 		0100000000000000000000000000000000000000000000000000000000000000	1
 	b	//											2009-11-11T23:00:01Z
 		0200000000000000000000000000000000000000000000000000000000000000	2
 	c	//											2009-11-10T23:00:00Z
-	d		//
-	e 		//										2009-11-11T23:00:01Z
+D	d		//
+DX	e 		//										2009-11-11T23:00:01Z
 	f
 		0300000000000000000000000000000000000000000000000000000000000000	3
 `
@@ -33,15 +33,15 @@ func TestIndex(t *testing.T) {
 	want := Index{
 		root: "/",
 		groups: []Files{{
-			{Path{"d1/a"}, d1, 1, t0, flagNone},
+			{Path{"d1/a"}, d1, 1, t0, flagKeep},
 			{Path{"d2/a"}, d1, 1, t0, flagNone},
 			{Path{"a"}, d1, 1, t0, flagNone},
 		}, {
 			{Path{"b"}, d2, 2, t1, flagNone},
 		}, {
 			{Path{"c"}, d3, 3, t0, flagNone},
-			{Path{"d\t"}, d3, 3, t0, flagNone},
-			{Path{"e \t"}, d3, 3, t1, flagNone},
+			{Path{"d\t"}, d3, 3, t0, flagDup},
+			{Path{"e \t"}, d3, 3, t1, flagDup | flagGone},
 			{Path{"f"}, d3, 3, t1, flagNone},
 		}},
 	}

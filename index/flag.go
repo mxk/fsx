@@ -1,9 +1,6 @@
 package index
 
-import (
-	"fmt"
-	"unsafe"
-)
+import "fmt"
 
 // Flag specifies file flags.
 type Flag byte
@@ -40,34 +37,34 @@ func (a Flag) MayRemove() bool { return a&flagKeep == flagDup || a&flagKeep == f
 
 // String returns the string representation of file flags.
 func (a Flag) String() string {
-	if a == 0 {
+	switch a {
+	case flagNone:
 		return ""
-	}
-	if a&^(flagKeep|flagGone) != 0 {
+	case flagDup:
+		return "D"
+	case flagJunk:
+		return "J"
+	case flagKeep:
+		return "K"
+	case flagGone:
+		return "X"
+	case flagDup | flagGone:
+		return "DX"
+	case flagJunk | flagGone:
+		return "JX"
+	case flagKeep | flagGone:
+		return "KX"
+	default:
 		panic(fmt.Sprintf("index: invalid flag value: 0x%X", byte(a)))
 	}
-	b := make([]byte, 0, 2)
-	switch a & flagKeep {
-	case flagDup:
-		b = append(b, flagDupS)
-	case flagJunk:
-		b = append(b, flagJunkS)
-	case flagKeep:
-		b = append(b, flagKeepS)
-	}
-	if a.IsGone() {
-		b = append(b, flagGoneS)
-	}
-	return unsafe.String(&b[0], len(b))
 }
 
-// parseFlag decodes the string representation of file flags. It panics if the
-// string is invalid.
-func parseFlag(b []byte) (a Flag) {
+// parseFlag decodes the string representation of file flags.
+func parseFlag(b []byte) (a Flag, ok bool) {
 	if len(b) == 0 {
-		return
+		return flagNone, true
 	}
-	ok := len(b) == 1
+	ok = len(b) == 1
 	if b[len(b)-1] == flagGoneS {
 		if a = flagGone; ok {
 			return
@@ -84,8 +81,5 @@ func parseFlag(b []byte) (a Flag) {
 	default:
 		ok = false
 	}
-	if ok {
-		return
-	}
-	panic(fmt.Sprintf("index: invalid file flag: %s", b))
+	return
 }
