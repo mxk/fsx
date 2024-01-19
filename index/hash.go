@@ -69,7 +69,7 @@ func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
 		return nil, fmt.Errorf("index: file modified while reading: %s", name)
 	}
 
-	file := &File{filePath(name), h.digest(), fi.Size(), fi.ModTime()}
+	file := &File{filePath(name), h.digest(), fi.Size(), fi.ModTime(), attrNone}
 	return file, nil
 }
 
