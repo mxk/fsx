@@ -91,6 +91,7 @@ func TestTree(t *testing.T) {
 	}
 
 	want := &Tree{
+		root: idx.root,
 		dirs: map[Path]*Dir{
 			Root:      root,
 			A.Path:    A,

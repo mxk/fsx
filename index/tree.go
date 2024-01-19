@@ -12,6 +12,7 @@ import (
 
 // Tree is a directory tree representation of the index.
 type Tree struct {
+	root string
 	dirs map[Path]*Dir
 	idx  map[Digest]Files
 }
@@ -39,6 +40,7 @@ type Dup struct {
 // Tree creates a tree representation of the index.
 func (idx *Index) Tree() *Tree {
 	t := &Tree{
+		root: idx.root,
 		dirs: make(map[Path]*Dir, len(idx.groups)/8),
 		idx:  make(map[Digest]Files, len(idx.groups)),
 	}
