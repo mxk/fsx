@@ -54,8 +54,10 @@ func (idx *Index) Tree() *Tree {
 		}
 		t.idx[g[0].Digest] = g
 		for _, f := range g {
-			t.addFile(f)
-			dirs.add(f.Dir()) // TODO: Don't count files that are ignored?
+			if !f.Flag.IsGone() {
+				t.addFile(f)
+				dirs.add(f.Dir()) // TODO: Don't count files that are ignored?
+			}
 		}
 		dirs.forEach(func(p Path) { t.dirs[p].UniqueFiles++ })
 	}
