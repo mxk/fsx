@@ -25,10 +25,8 @@ DX	e 		//										2009-11-11T23:00:01Z
 
 func TestIndex(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
-	t0, err := time.Parse(time.RFC3339Nano, "2009-11-10T23:00:00Z")
-	require.NoError(t, err)
-	t1, err := time.Parse(time.RFC3339Nano, "2009-11-11T23:00:01Z")
-	require.NoError(t, err)
+	t0 := time.Date(2009, 11, 10, 23, 00, 00, 0, time.UTC)
+	t1 := time.Date(2009, 11, 11, 23, 00, 01, 0, time.UTC)
 
 	want := Index{
 		root: "/",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mxk/go-cli"
@@ -23,6 +24,7 @@ var _ = indexCli.Add(&cli.Cfg{
 type indexCreateCmd struct{}
 
 func (indexCreateCmd) Main(args []string) error {
+	root := filepath.Clean(args[1])
 	ctx := context.Background()
 	var walkErr bool
 	errFn := func(err error) {
@@ -30,7 +32,7 @@ func (indexCreateCmd) Main(args []string) error {
 		log.Println(err)
 	}
 	var lastProgReport time.Time
-	idx, err := index.Build(ctx, args[1], errFn, func(p *index.Progress) {
+	idx, err := index.Build(ctx, os.DirFS(root), errFn, func(p *index.Progress) {
 		if p.IsFinal() || p.Time().Sub(lastProgReport) >= 5*time.Minute {
 			lastProgReport = p.Time()
 			log.Println(p)

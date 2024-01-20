@@ -15,25 +15,25 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-// Build builds an index of the file system under root. If errFn is non-nil, it
-// is called for any file-specific errors. If progFn is non-nil, it is called at
-// regular intervals to report progress.
-func Build(ctx context.Context, root string, errFn func(error), progFn func(*Progress)) (Index, error) {
-	root = filepath.Clean(root)
+// Build builds an index of fsys. If errFn is non-nil, it is called for any
+// file-specific errors. If progFn is non-nil, it is called at regular intervals
+// to report progress. A non-nil error is returned if ctx is canceled.
+func Build(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
 	file := make(chan *File, 1)
 	var werr chan error
 	if errFn != nil {
 		werr = make(chan error, 1)
 	}
-	w := walker{fsys: os.DirFS(root), file: file, werr: werr}
+	w := walker{fsys: fsys, file: file, werr: werr}
 	go w.walk()
 
-	prog := newProgress()
+	var prog Progress
 	var progTick <-chan time.Time
 	if progFn != nil {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		progTick = t.C
+		prog.reset(time.Now())
 	}
 
 	all := make(Files, 0, 4096)
@@ -42,16 +42,17 @@ func Build(ctx context.Context, root string, errFn func(error), progFn func(*Pro
 		select {
 		case f, ok := <-file:
 			if !ok {
-				if progFn != nil {
+				if progTick != nil {
 					prog.final = true
 					prog.update(time.Now())
 					progFn(&prog)
 				}
 				all.Sort()
-				return New(root, all), nil
+				return New(dirFSRoot(fsys), all), nil
 			}
-			all = append(all, f)
-			prog.addFile(f.Size)
+			if all = append(all, f); progTick != nil {
+				prog.fileDone(time.Now(), f.Size)
+			}
 		case err := <-werr:
 			errFn(err)
 		case <-progTick:
@@ -131,9 +132,9 @@ type Progress struct {
 	final    bool
 }
 
-func newProgress() Progress {
-	t := time.Now()
-	return Progress{start: t, now: t}
+// reset resets progress to the specified start time.
+func (p *Progress) reset(start time.Time) {
+	*p = Progress{start: start, now: start}
 }
 
 // Time returns the time when the progress was last updated.
@@ -150,10 +151,10 @@ func (p *Progress) String() string {
 		p.files, bytes, dur, p.fps, bps)
 }
 
-func (p *Progress) addFile(bytes int64) {
+func (p *Progress) fileDone(now time.Time, bytes int64) {
 	p.newFiles++
 	p.newBytes += uint64(bytes)
-	if now := time.Now(); now.Sub(p.now) >= time.Second {
+	if now.Sub(p.now) >= time.Second {
 		p.update(now)
 	}
 }
@@ -174,4 +175,18 @@ func (p *Progress) update(now time.Time) {
 	p.bps = (1-alpha)*p.bps + alpha*(float64(p.newBytes)/sec)
 	p.newFiles = 0
 	p.newBytes = 0
+}
+
+// dirFSRoot returns the root directory name if fsys refers to the local file
+// system (e.g. os.DirFS).
+func dirFSRoot(fsys fs.FS) string {
+	f, err := fsys.Open(".")
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	if f, ok := f.(*os.File); ok {
+		return filepath.Clean(f.Name())
+	}
+	return ""
 }
