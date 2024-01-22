@@ -220,15 +220,6 @@ func (t *Tree) file(p Path) *File {
 	return nil
 }
 
-// clearFlags clears the specified file flags.
-func (t *Tree) clearFlags(l Flag) {
-	for _, g := range t.idx {
-		for _, f := range g {
-			f.Flag &^= l
-		}
-	}
-}
-
 // dedup locates duplicate directories in the Tree.
 type dedup struct {
 	subtree    dirStack
