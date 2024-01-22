@@ -10,16 +10,16 @@ import (
 
 var _ = indexCli.Add(&cli.Cfg{
 	Name:    "cat",
-	Usage:   "<db>",
+	Usage:   "<index>",
 	Summary: "Write file system index to stdout",
 	MinArgs: 1,
 	MaxArgs: 1,
-	New:     func() cli.Cmd { return indexCatCmd{} },
+	New:     func() cli.Cmd { return catCmd{} },
 })
 
-type indexCatCmd struct{}
+type catCmd struct{}
 
-func (indexCatCmd) Main(args []string) error {
+func (catCmd) Main(args []string) error {
 	f, err := os.Open(args[0])
 	if err != nil {
 		return err

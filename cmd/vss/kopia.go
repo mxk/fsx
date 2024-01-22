@@ -22,15 +22,15 @@ var _ = vssCli.Add(&cli.Cfg{
 		if mnt == "" {
 			mnt = "C:"
 		}
-		return &vssKopiaCmd{mnt + `\`}
+		return &kopiaCmd{mnt + `\`}
 	},
 })
 
-type vssKopiaCmd struct {
+type kopiaCmd struct {
 	Mnt string `cli:"Root {directory} where to mount shadow copies"`
 }
 
-func (*vssKopiaCmd) Help(w *cli.Writer) {
+func (*kopiaCmd) Help(w *cli.Writer) {
 	w.Text(`
 	This command can be set as the Before/After Snapshot action in Kopia to use
 	the Volume Shadow Copy Service for consistent backups. It performs the same
@@ -49,7 +49,7 @@ func (*vssKopiaCmd) Help(w *cli.Writer) {
 	`)
 }
 
-func (cmd *vssKopiaCmd) Main([]string) error {
+func (cmd *kopiaCmd) Main([]string) error {
 	var (
 		action   = os.Getenv("KOPIA_ACTION")
 		snapID   = os.Getenv("KOPIA_SNAPSHOT_ID")

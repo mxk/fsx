@@ -14,16 +14,16 @@ import (
 
 var _ = indexCli.Add(&cli.Cfg{
 	Name:    "create|c",
-	Usage:   "<out-db> <dir>",
+	Usage:   "<index> <dir>",
 	Summary: "Create a new file system index",
 	MinArgs: 2,
 	MaxArgs: 2,
-	New:     func() cli.Cmd { return indexCreateCmd{} },
+	New:     func() cli.Cmd { return createCmd{} },
 })
 
-type indexCreateCmd struct{}
+type createCmd struct{}
 
-func (indexCreateCmd) Main(args []string) error {
+func (createCmd) Main(args []string) error {
 	root := filepath.Clean(args[1])
 	ctx := context.Background()
 	var walkErr bool

@@ -13,11 +13,11 @@ var _ = vssCli.Add(&cli.Cfg{
 	Summary: "Remove a shadow copy by ID or symlink path",
 	MinArgs: 1,
 	MaxArgs: 1,
-	New:     func() cli.Cmd { return vssRemoveCmd{} },
+	New:     func() cli.Cmd { return removeCmd{} },
 })
 
-type vssRemoveCmd struct{}
+type removeCmd struct{}
 
-func (vssRemoveCmd) Main(args []string) error {
+func (removeCmd) Main(args []string) error {
 	return vss.Remove(args[0])
 }

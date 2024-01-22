@@ -15,14 +15,14 @@ var _ = vssCli.Add(&cli.Cfg{
 	Summary: "Create a shadow copy",
 	MinArgs: 1,
 	MaxArgs: 1,
-	New:     func() cli.Cmd { return &vssCreateCmd{} },
+	New:     func() cli.Cmd { return &createCmd{} },
 })
 
-type vssCreateCmd struct {
+type createCmd struct {
 	Link string `cli:"Symlink {path} where to mount the new shadow copy"`
 }
 
-func (cmd *vssCreateCmd) Main(args []string) error {
+func (cmd *createCmd) Main(args []string) error {
 	if cmd.Link != "" {
 		return vss.CreateLink(cmd.Link, args[0])
 	}
