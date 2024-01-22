@@ -25,27 +25,31 @@ type createCmd struct{}
 
 func (createCmd) Main(args []string) error {
 	root := filepath.Clean(args[1])
-	ctx := context.Background()
-	var walkErr bool
-	errFn := func(err error) {
-		walkErr = true
-		log.Println(err)
-	}
-	var lastProgReport time.Time
-	idx, err := index.Build(ctx, os.DirFS(root), errFn, func(p *index.Progress) {
-		if p.IsFinal() || p.Time().Sub(lastProgReport) >= 5*time.Minute {
-			lastProgReport = p.Time()
-			log.Println(p)
-		}
-	})
+	var m monitor
+	idx, err := index.Build(context.Background(), os.DirFS(root), m.err, m.report)
 	if err != nil {
 		return err
 	}
-	err = cli.WriteFileAtomic(args[0], func(f *os.File) error {
-		return idx.Write(f)
-	})
-	if err == nil && walkErr {
+	err = cli.WriteFileAtomic(args[0], func(f *os.File) error { return idx.Write(f) })
+	if err == nil && m.walkErr {
 		err = cli.ExitCode(1)
 	}
 	return err
+}
+
+type monitor struct {
+	walkErr    bool
+	lastReport time.Time
+}
+
+func (m *monitor) err(err error) {
+	m.walkErr = true
+	log.Println(err)
+}
+
+func (m *monitor) report(p *index.Progress) {
+	if p.IsFinal() || p.Time().Sub(m.lastReport) >= 5*time.Minute {
+		m.lastReport = p.Time()
+		log.Println(p)
+	}
 }
