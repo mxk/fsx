@@ -52,7 +52,7 @@ walk:
 				break walk
 			}
 			if all = append(all, f); progTick != nil {
-				prog.fileDone(time.Now(), f.Size)
+				prog.fileDone(time.Now(), f.size)
 			}
 		case err := <-werr:
 			errFn(err)
@@ -69,7 +69,7 @@ walk:
 	case <-ctx.Done():
 		if t != nil {
 			for _, f := range all {
-				f.Flag &^= flagSame
+				f.flag &^= flagSame
 			}
 		}
 		return Index{}, ctx.Err()
@@ -80,10 +80,10 @@ walk:
 	if t != nil {
 		for _, g := range t.idx {
 			for _, f := range g {
-				if f.Flag&flagSame != 0 {
-					f.Flag &^= flagSame
-				} else if f.Flag != 0 {
-					f.Flag |= flagGone
+				if f.flag&flagSame != 0 {
+					f.flag &^= flagSame
+				} else if f.flag != 0 {
+					f.flag |= flagGone
 					all = append(all, f)
 				}
 			}
@@ -133,7 +133,7 @@ func (w *walker) walk(ctx context.Context) {
 		if e.Type().IsRegular() {
 			if w.ref != nil {
 				if f := w.ref.file(Path{name}); f != nil && f.IsSame(e.Info()) {
-					f.Flag |= flagSame
+					f.flag |= flagSame
 					w.file <- f
 					return nil
 				}

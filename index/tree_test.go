@@ -10,15 +10,15 @@ import (
 func TestTree(t *testing.T) {
 	d1, d2, d3, d4, d5 := Digest{1}, Digest{2}, Digest{3}, Digest{4}, Digest{5}
 
-	a1 := &File{Digest: d1, Path: Path{"a1"}}
-	a2 := &File{Digest: d1, Path: Path{"A/a2"}}
-	a3 := &File{Digest: d1, Path: Path{"A/B/a3"}}
-	b1 := &File{Digest: d2, Path: Path{"A/b1"}}
-	b2 := &File{Digest: d2, Path: Path{"C/D/E/b2"}}
-	c1 := &File{Digest: d3, Path: Path{"C/c1"}}
-	c2 := &File{Digest: d3, Path: Path{"C/F/c2"}}
-	x1 := &File{Digest: d4, Path: Path{"C/.git/X/x1"}}
-	y1 := &File{Digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}}
+	a1 := &File{digest: d1, Path: Path{"a1"}}
+	a2 := &File{digest: d1, Path: Path{"A/a2"}}
+	a3 := &File{digest: d1, Path: Path{"A/B/a3"}}
+	b1 := &File{digest: d2, Path: Path{"A/b1"}}
+	b2 := &File{digest: d2, Path: Path{"C/D/E/b2"}}
+	c1 := &File{digest: d3, Path: Path{"C/c1"}}
+	c2 := &File{digest: d3, Path: Path{"C/F/c2"}}
+	x1 := &File{digest: d4, Path: Path{"C/.git/X/x1"}}
+	y1 := &File{digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}}
 
 	idx := Index{
 		root:   "/",
@@ -27,67 +27,67 @@ func TestTree(t *testing.T) {
 
 	Z := &Dir{
 		Path:        Path{"C/.git/X/.git/Z/"},
-		Files:       Files{y1},
-		UniqueFiles: 1, // y1
+		files:       Files{y1},
+		uniqueFiles: 1, // y1
 	}
 	GIT2 := &Dir{
 		Path:        Path{"C/.git/X/.git/"},
-		Dirs:        Dirs{Z},
-		UniqueFiles: 1, // y1
+		dirs:        Dirs{Z},
+		uniqueFiles: 1, // y1
 	}
 	X := &Dir{
 		Path:        Path{"C/.git/X/"},
-		Dirs:        Dirs{GIT2},
-		Files:       Files{x1},
-		UniqueFiles: 2, // x1, y1
+		dirs:        Dirs{GIT2},
+		files:       Files{x1},
+		uniqueFiles: 2, // x1, y1
 	}
 	GIT1 := &Dir{
 		Path:        Path{"C/.git/"},
-		Dirs:        Dirs{X},
-		UniqueFiles: 2, // x1, y1
+		dirs:        Dirs{X},
+		uniqueFiles: 2, // x1, y1
 	}
-	GIT1.Atom = GIT1
-	X.Atom = GIT1
-	GIT2.Atom = GIT1
-	Z.Atom = GIT1
+	GIT1.atom = GIT1
+	X.atom = GIT1
+	GIT2.atom = GIT1
+	Z.atom = GIT1
 
 	F := &Dir{
 		Path:        Path{"C/F/"},
-		Files:       Files{c2},
-		UniqueFiles: 1, // c2
+		files:       Files{c2},
+		uniqueFiles: 1, // c2
 	}
 	E := &Dir{
 		Path:        Path{"C/D/E/"},
-		Files:       Files{b2},
-		UniqueFiles: 1, // b2
+		files:       Files{b2},
+		uniqueFiles: 1, // b2
 	}
 	D := &Dir{
 		Path:        Path{"C/D/"},
-		Dirs:        Dirs{E},
-		UniqueFiles: 1, // b2,
+		dirs:        Dirs{E},
+		uniqueFiles: 1, // b2,
 	}
 	C := &Dir{
 		Path:        Path{"C/"},
-		Dirs:        Dirs{GIT1, D, F},
-		Files:       Files{c1},
-		UniqueFiles: 4, // b2, c[12], x1, y1
+		dirs:        Dirs{GIT1, D, F},
+		files:       Files{c1},
+		uniqueFiles: 4, // b2, c[12], x1, y1
 	}
 	B := &Dir{
 		Path:        Path{"A/B/"},
-		Files:       Files{a3},
-		UniqueFiles: 1, // a3
+		files:       Files{a3},
+		uniqueFiles: 1, // a3
 	}
 	A := &Dir{
 		Path:        Path{"A/"},
-		Dirs:        Dirs{B},
-		Files:       Files{a2, b1},
-		UniqueFiles: 2, // a[23], b1
+		dirs:        Dirs{B},
+		files:       Files{a2, b1},
+		uniqueFiles: 2, // a[23], b1
 	}
 	root := &Dir{
 		Path:        Root,
-		Dirs:        Dirs{A, C},
-		Files:       Files{a1},
-		UniqueFiles: 5,
+		dirs:        Dirs{A, C},
+		files:       Files{a1},
+		uniqueFiles: 5,
 	}
 
 	want := &Tree{
@@ -122,7 +122,7 @@ func TestTree(t *testing.T) {
 
 func TestDedup(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
-	file := func(d Digest, p string) *File { return &File{Digest: d, Size: 1, Path: Path{p}} }
+	file := func(d Digest, p string) *File { return &File{digest: d, size: 1, Path: Path{p}} }
 
 	a1 := file(d1, "A/a1")
 	b1 := file(d2, "A/b1")
@@ -162,14 +162,14 @@ func TestDirStack(t *testing.T) {
 	assert.Equal(t, d2, s.next())
 	assert.Nil(t, s.next())
 
-	d1.Dirs = append(d1.Dirs, d2, d3)
+	d1.dirs = append(d1.dirs, d2, d3)
 	s.from(d1)
 	assert.Equal(t, d1, s.next())
 	assert.Equal(t, d2, s.next())
 	assert.Equal(t, d3, s.next())
 	assert.Nil(t, s.next())
 
-	d2.Dirs = append(d2.Dirs, d4)
+	d2.dirs = append(d2.dirs, d4)
 	s.from(d1)
 	assert.Equal(t, d1, s.next())
 	assert.Equal(t, d2, s.next())

@@ -36,17 +36,17 @@ func (idx *Index) ToTree() *Tree {
 	// unique file counts.
 	var dirs uniqueDirs
 	for _, g := range idx.groups {
-		if _, dup := t.idx[g[0].Digest]; dup {
-			panic(fmt.Sprintf("index: digest collision: %x", g[0].Digest))
+		if _, dup := t.idx[g[0].digest]; dup {
+			panic(fmt.Sprintf("index: digest collision: %x", g[0].digest))
 		}
-		t.idx[g[0].Digest] = g
+		t.idx[g[0].digest] = g
 		for _, f := range g {
-			if !f.Flag.IsGone() {
+			if !f.flag.IsGone() {
 				t.addFile(f)
 				dirs.add(f.Dir()) // TODO: Don't count files that are ignored?
 			}
 		}
-		dirs.forEach(func(p Path) { t.dirs[p].UniqueFiles++ })
+		dirs.forEach(func(p Path) { t.dirs[p].uniqueFiles++ })
 	}
 
 	// Sort directories and files, and find atomic directories
@@ -57,10 +57,10 @@ func (idx *Index) ToTree() *Tree {
 		go func(sortCh <-chan *Dir) {
 			defer wg.Done()
 			for d := range sortCh {
-				slices.SortFunc(d.Dirs, func(a, b *Dir) int {
+				slices.SortFunc(d.dirs, func(a, b *Dir) int {
 					return cmp.Compare(a.Base(), b.Base())
 				})
-				slices.SortFunc(d.Files, func(a, b *File) int {
+				slices.SortFunc(d.files, func(a, b *File) int {
 					return cmp.Compare(a.Base(), b.Base())
 				})
 			}
@@ -69,9 +69,9 @@ func (idx *Index) ToTree() *Tree {
 	var subtree dirStack
 	for _, d := range t.dirs {
 		sortCh <- d
-		if d.Atom == nil && isAtomic(d.Base()) {
+		if d.atom == nil && isAtomic(d.Base()) {
 			for subtree.from(d); len(subtree) > 0; {
-				subtree.next().Atom = d
+				subtree.next().atom = d
 			}
 		}
 	}
@@ -103,11 +103,11 @@ func (t *Tree) Dir(name string) *Dir {
 // duplicate.
 func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	root, ok := t.dirs[dir]
-	if !ok || len(root.Dirs) == 0 {
+	if !ok || len(root.dirs) == 0 {
 		return nil
 	}
 	var q dirStack
-	q.from(root.Dirs...)
+	q.from(root.dirs...)
 
 	// Directories are sent to workers via next. Duplicates are returned via
 	// dup. Subdirectories of non-duplicates are returned via dirs.
@@ -124,7 +124,7 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 				if d := dd.dedup(t, root, maxLost); d != nil {
 					dup <- d
 				} else {
-					dirs <- root.Dirs
+					dirs <- root.dirs
 				}
 			}
 		}(next, dup, dirs)
@@ -188,18 +188,18 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 func (t *Tree) addFile(f *File) {
 	name := f.Dir()
 	if p, ok := t.dirs[name]; ok {
-		p.Files = append(p.Files, f)
+		p.files = append(p.files, f)
 		return
 	}
-	d := &Dir{Path: name, Files: Files{f}}
+	d := &Dir{Path: name, files: Files{f}}
 	t.dirs[name] = d
 	for name != Root {
 		name = d.Dir()
 		if p, ok := t.dirs[name]; ok {
-			p.Dirs = append(p.Dirs, d)
+			p.dirs = append(p.dirs, d)
 			break
 		}
-		d = &Dir{Path: name, Dirs: Dirs{d}}
+		d = &Dir{Path: name, dirs: Dirs{d}}
 		t.dirs[name] = d
 	}
 }
@@ -211,11 +211,11 @@ func (t *Tree) file(p Path) *File {
 		return nil
 	}
 	base := p.Base()
-	i, ok := slices.BinarySearchFunc(d.Files, base, func(f *File, base string) int {
+	i, ok := slices.BinarySearchFunc(d.files, base, func(f *File, base string) int {
 		return cmp.Compare(f.Base(), base)
 	})
 	if ok {
-		return d.Files[i]
+		return d.files[i]
 	}
 	return nil
 }
@@ -232,7 +232,7 @@ type dedup struct {
 
 // dedup returns a non-nil Dup if root can be deduplicated.
 func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
-	if root.Atom != nil && root.Atom != root {
+	if root.atom != nil && root.atom != root {
 		return nil
 	}
 	if dd.safe == nil {
@@ -249,18 +249,18 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	dd.ignored = dd.ignored[:0]
 	for dd.subtree.from(root); len(dd.subtree) > 0; {
 	files:
-		for _, f := range dd.subtree.next().Files {
+		for _, f := range dd.subtree.next().files {
 			if f.canIgnore() {
 				dd.ignored = append(dd.ignored, f)
 				continue
 			}
-			for _, dup := range tree.idx[f.Digest] {
+			for _, dup := range tree.idx[f.digest] {
 				if !root.Contains(dup.Path) {
-					dd.safe[f.Digest] = struct{}{}
+					dd.safe[f.digest] = struct{}{}
 					continue files
 				}
 			}
-			if dd.lost[f.Digest] = struct{}{}; len(dd.lost) > maxLost {
+			if dd.lost[f.digest] = struct{}{}; len(dd.lost) > maxLost {
 				return nil
 			}
 		}
@@ -309,10 +309,10 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 		bestScore, bestDir := -math.MaxFloat64, Path{}
 		for p, n := range dd.safeCount {
 			alt := tree.dirs[p]
-			if alt.Atom != nil {
-				alt = alt.Atom // TODO: Should n be changed?
+			if alt.atom != nil {
+				alt = alt.atom // TODO: Should n be changed?
 			}
-			score := float64(n)*(float64(1+n)/float64(1+alt.UniqueFiles)) +
+			score := float64(n)*(float64(1+n)/float64(1+alt.uniqueFiles)) +
 				2.0/float64(1+root.Dist(p))
 			if p.Contains(root.Path) {
 				score -= float64(len(dd.safe))
@@ -382,7 +382,7 @@ func (s *dirStack) push(ds Dirs) {
 func (s *dirStack) next() (d *Dir) {
 	if i := len(*s) - 1; i >= 0 {
 		d, *s = (*s)[i], (*s)[:i]
-		s.push(d.Dirs)
+		s.push(d.dirs)
 	}
 	return
 }

@@ -80,15 +80,15 @@ func read(src io.Reader) (Index, error) {
 
 			// Path and modification time
 			p, ln, _ := bytes.Cut(ln, []byte("\t//"))
-			f := &File{Path: filePath(string(p)), Flag: flag}
+			f := &File{Path: filePath(string(p)), flag: flag}
 			if len(ln) > 0 {
-				if err := f.ModTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
+				if err := f.modTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
 					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
 				}
 			} else if len(g) == 0 {
 				return Index{}, fmt.Errorf("index: missing modification time on line %d", line)
 			} else {
-				f.ModTime = g[len(g)-1].ModTime
+				f.modTime = g[len(g)-1].modTime
 			}
 
 			if len(g) == cap(g) && len(g) < 256 {
@@ -103,20 +103,20 @@ func read(src io.Reader) (Index, error) {
 
 		// Digest
 		digest, ln, ok := cutByte(ln, '\t')
-		n, err := hex.Decode(g[0].Digest[:], digest)
+		n, err := hex.Decode(g[0].digest[:], digest)
 		if !ok || n != len(Digest{}) || err != nil {
 			return Index{}, fmt.Errorf("index: invalid digest on line %d", line)
 		}
 
 		// Size
 		v, err := strconv.ParseUint(unsafeString(ln), 10, 63)
-		if g[0].Size = int64(v); err != nil {
+		if g[0].size = int64(v); err != nil {
 			return Index{}, fmt.Errorf("index: invalid size on line %d", line)
 		}
 
 		// Copy digest and size
 		for _, f := range g[1:] {
-			f.Digest, f.Size = g[0].Digest, g[0].Size
+			f.digest, f.size = g[0].digest, g[0].size
 		}
 		groups, g = append(groups, g[:len(g):len(g)]), g[len(g):]
 	}
@@ -189,24 +189,24 @@ func (idx *Index) write(dst io.Writer) error {
 		for _, f := range g {
 			n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
 			align, lineWidth = max(align, n), append(lineWidth, n)
-			if f.Digest != g[0].Digest || f.Size != g[0].Size {
+			if f.digest != g[0].digest || f.size != g[0].size {
 				panic(fmt.Sprintf("index: group digest/size mismatch: %s", f))
 			}
 		}
 
 		// Flags, paths, and modification times
 		for i, f := range g {
-			_, _ = w.WriteString(f.Flag.String())
+			_, _ = w.WriteString(f.flag.String())
 			_ = w.WriteByte('\t')
 			_, _ = w.WriteString(f.p)
-			if i == 0 || !f.ModTime.Equal(g[i-1].ModTime) {
+			if i == 0 || !f.modTime.Equal(g[i-1].modTime) {
 				_, _ = w.WriteString("\t//\t")
 				n := (align - lineWidth[i]) / tabWidth
 				b := buf(w, n+len(time.RFC3339Nano))[:n]
 				for i := range b {
 					b[i] = '\t'
 				}
-				_, _ = w.Write(f.ModTime.AppendFormat(b, time.RFC3339Nano))
+				_, _ = w.Write(f.modTime.AppendFormat(b, time.RFC3339Nano))
 			} else if strings.TrimRight(f.p, "\t\n\v\f\r ") != f.p {
 				_, _ = w.WriteString("\t//")
 			}
@@ -216,12 +216,12 @@ func (idx *Index) write(dst io.Writer) error {
 		// Digest
 		_, _ = w.WriteString("\t\t")
 		b := buf(w, digestHex)[:digestHex]
-		hex.Encode(b, g[0].Digest[:])
+		hex.Encode(b, g[0].digest[:])
 		_, _ = w.Write(b)
 
 		// Size
 		b = append(buf(w, len("\t18446744073709551615")), '\t')
-		_, _ = w.Write(strconv.AppendUint(b, uint64(g[0].Size), 10))
+		_, _ = w.Write(strconv.AppendUint(b, uint64(g[0].size), 10))
 		if err := w.WriteByte('\n'); err != nil {
 			return err
 		}
@@ -263,21 +263,21 @@ func groupByDigest(all Files) []Files {
 	}
 	idx := make(map[Digest]group, len(all))
 	for i, f := range all {
-		g, ok := idx[f.Digest]
+		g, ok := idx[f.digest]
 		if !ok {
 			g.i = i
-		} else if g.f[0].Size != f.Size {
+		} else if g.f[0].size != f.size {
 			panic(fmt.Sprintf("index: digest collision: %q != %q", g.f[0].Path, f.Path))
 		}
 		g.f = append(g.f, f)
-		idx[f.Digest] = g
+		idx[f.digest] = g
 	}
 	groups := make([]Files, 0, len(idx))
 	for _, g := range idx {
 		groups = append(groups, g.f)
 	}
 	slices.SortFunc(groups, func(a, b Files) int {
-		return cmp.Compare(idx[a[0].Digest].i, idx[b[0].Digest].i)
+		return cmp.Compare(idx[a[0].digest].i, idx[b[0].digest].i)
 	})
 	return groups
 }
