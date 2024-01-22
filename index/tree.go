@@ -6,7 +6,6 @@ import (
 	"math"
 	"runtime"
 	"slices"
-	"strings"
 	"sync"
 )
 
@@ -17,18 +16,6 @@ type Tree struct {
 	idx  map[Digest]Files
 }
 
-// Dir is a directory in the file system.
-type Dir struct {
-	Path
-	Dirs        Dirs  // Subdirectories
-	Files       Files // Files in this directory
-	Atom        *Dir  // Atomic container directory, such as .git
-	UniqueFiles int   // Total number of direct and indirect unique files
-}
-
-// Dirs is an ordered list of directories.
-type Dirs []*Dir
-
 // Dup is a directory that can be deleted without losing too much data.
 type Dup struct {
 	*Dir
@@ -37,8 +24,8 @@ type Dup struct {
 	Ignored Files // Unimportant files that may be lost if Dir is deleted
 }
 
-// Tree creates a tree representation of the index.
-func (idx *Index) Tree() *Tree {
+// ToTree converts from an index to a tree representation.
+func (idx *Index) ToTree() *Tree {
 	t := &Tree{
 		root: idx.root,
 		dirs: make(map[Path]*Dir, len(idx.groups)/8),
@@ -93,24 +80,16 @@ func (idx *Index) Tree() *Tree {
 	return t
 }
 
-// addFile adds file f to the tree, creating all required parent directories.
-func (t *Tree) addFile(f *File) {
-	name := f.Dir()
-	if p, ok := t.dirs[name]; ok {
-		p.Files = append(p.Files, f)
-		return
+// ToIndex converts from a tree to index representation.
+func (t *Tree) ToIndex() Index {
+	groups := make([]Files, 0, len(t.idx))
+	for _, g := range t.idx {
+		groups = append(groups, g)
 	}
-	d := &Dir{Path: name, Files: Files{f}}
-	t.dirs[name] = d
-	for name != Root {
-		name = d.Dir()
-		if p, ok := t.dirs[name]; ok {
-			p.Dirs = append(p.Dirs, d)
-			break
-		}
-		d = &Dir{Path: name, Dirs: Dirs{d}}
-		t.dirs[name] = d
-	}
+	// TODO: Maintain original group order if there are identical paths with
+	// different digests.
+	slices.SortFunc(groups, func(a, b Files) int { return a[0].Path.cmp(b[0].Path) })
+	return Index{t.root, groups}
 }
 
 // Dir returns the specified directory, if it exists.
@@ -202,6 +181,51 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 			}
 		}
 		wg.Done()
+	}
+}
+
+// addFile adds file f to the tree, creating all required parent directories.
+func (t *Tree) addFile(f *File) {
+	name := f.Dir()
+	if p, ok := t.dirs[name]; ok {
+		p.Files = append(p.Files, f)
+		return
+	}
+	d := &Dir{Path: name, Files: Files{f}}
+	t.dirs[name] = d
+	for name != Root {
+		name = d.Dir()
+		if p, ok := t.dirs[name]; ok {
+			p.Dirs = append(p.Dirs, d)
+			break
+		}
+		d = &Dir{Path: name, Dirs: Dirs{d}}
+		t.dirs[name] = d
+	}
+}
+
+// file returns the specified file, if it exists.
+func (t *Tree) file(p Path) *File {
+	d := t.dirs[p.Dir()]
+	if p.IsDir() || d == nil {
+		return nil
+	}
+	base := p.Base()
+	i, ok := slices.BinarySearchFunc(d.Files, base, func(f *File, base string) int {
+		return cmp.Compare(f.Base(), base)
+	})
+	if ok {
+		return d.Files[i]
+	}
+	return nil
+}
+
+// clearFlags clears the specified file flags.
+func (t *Tree) clearFlags(l Flag) {
+	for _, g := range t.idx {
+		for _, f := range g {
+			f.Flag &^= l
+		}
 	}
 }
 
@@ -380,15 +404,4 @@ func isAtomic(dir string) bool {
 	default:
 		return false
 	}
-}
-
-// canIgnore returns whether the specified file name can be ignored for the
-// purposes of deduplication.
-func (f *File) canIgnore() bool {
-	if f.Size == 0 {
-		return true
-	}
-	name := f.Base()
-	return strings.EqualFold(name, "Thumbs.db") ||
-		strings.EqualFold(name, "desktop.ini")
 }

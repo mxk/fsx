@@ -19,13 +19,19 @@ import (
 // file-specific errors. If progFn is non-nil, it is called at regular intervals
 // to report progress. A non-nil error is returned if ctx is canceled.
 func Build(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+	return (*Tree)(nil).Reindex(ctx, fsys, errFn, progFn)
+}
+
+// Reindex updates the index of fsys, skipping the hashing of any files that
+// have identical names, sizes, and modification times. See Build for more info.
+func (t *Tree) Reindex(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
 	file := make(chan *File, 1)
 	var werr chan error
 	if errFn != nil {
 		werr = make(chan error, 1)
 	}
-	w := walker{fsys: fsys, file: file, werr: werr}
-	go w.walk()
+	w := walker{ref: t, fsys: fsys, file: file, werr: werr}
+	go w.walk(ctx)
 
 	var prog Progress
 	var progTick <-chan time.Time
@@ -36,19 +42,14 @@ func Build(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Prog
 		prog.reset(time.Now())
 	}
 
-	all := make(Files, 0, 4096)
-	cancel := ctx.Done()
+	// Receive files from the walker goroutines
+	all := make(Files, 0, 64)
+walk:
 	for {
 		select {
 		case f, ok := <-file:
 			if !ok {
-				if progTick != nil {
-					prog.final = true
-					prog.update(time.Now())
-					progFn(&prog)
-				}
-				all.Sort()
-				return New(dirFSRoot(fsys), all), nil
+				break walk
 			}
 			if all = append(all, f); progTick != nil {
 				prog.fileDone(time.Now(), f.Size)
@@ -57,21 +58,51 @@ func Build(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Prog
 			errFn(err)
 		case <-progTick:
 			progFn(&prog)
-		case <-cancel:
-			return Index{}, ctx.Err()
 		}
 	}
+	if progTick != nil {
+		prog.final = true
+		prog.update(time.Now())
+		progFn(&prog)
+	}
+	select {
+	case <-ctx.Done():
+		if t != nil {
+			for _, f := range all {
+				f.Flag &^= flagSame
+			}
+		}
+		return Index{}, ctx.Err()
+	default:
+	}
+
+	// Copy over non-existent files
+	if t != nil {
+		for _, g := range t.idx {
+			for _, f := range g {
+				if f.Flag&flagSame != 0 {
+					f.Flag &^= flagSame
+				} else if f.Flag != 0 {
+					f.Flag |= flagGone
+					all = append(all, f)
+				}
+			}
+		}
+	}
+	all.Sort()
+	return New(dirFSRoot(fsys), all), nil
 }
 
 // walker walks the file system, hashing all regular files.
 type walker struct {
+	ref  *Tree
 	fsys fs.FS
 	file chan<- *File
 	werr chan<- error
 	wg   sync.WaitGroup
 }
 
-func (w *walker) walk() {
+func (w *walker) walk(ctx context.Context) {
 	names := make(chan string, 1)
 	defer func() {
 		close(names)
@@ -82,14 +113,31 @@ func (w *walker) walk() {
 		w.wg.Add(1)
 		go w.hash(names)
 	}
+	cancel := ctx.Done()
 	err := fs.WalkDir(w.fsys, ".", func(name string, e fs.DirEntry, err error) error {
+		if cancel != nil {
+			select {
+			case <-cancel:
+				return fs.SkipAll
+			default:
+			}
+		}
 		if err != nil {
 			w.err(fmt.Errorf("index: walk error: %s (%w)", name, err))
-			err = nil
-		} else if strings.IndexByte(name, '\n') >= 0 {
+			return nil
+		}
+		if strings.IndexByte(name, '\n') >= 0 {
 			w.err(fmt.Errorf("index: new line in path: %q", name))
-			err = fs.SkipDir
-		} else if e.Type().IsRegular() {
+			return fs.SkipDir
+		}
+		if e.Type().IsRegular() {
+			if w.ref != nil {
+				if f := w.ref.file(Path{name}); f != nil && f.IsSame(e.Info()) {
+					f.Flag |= flagSame
+					w.file <- f
+					return nil
+				}
+			}
 			names <- name
 		} else if !e.IsDir() {
 			w.err(fmt.Errorf("index: not a regular file or directory: %s", name))

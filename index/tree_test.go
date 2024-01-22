@@ -114,7 +114,7 @@ func TestTree(t *testing.T) {
 		},
 	}
 
-	have := idx.Tree()
+	have := idx.ToTree()
 	mapEqual(t, want.dirs, have.dirs)
 	mapEqual(t, want.idx, have.idx)
 	assert.Equal(t, want, have)
@@ -136,7 +136,7 @@ func TestDedup(t *testing.T) {
 		groups: []Files{{a1, a2}, {b1, b2}, {c1, c2}},
 	}
 
-	tree := idx.Tree()
+	tree := idx.ToTree()
 	want := []*Dup{{
 		Dir: tree.dirs[Path{"A/"}],
 		Alt: Dirs{tree.dirs[Path{"B/"}]},

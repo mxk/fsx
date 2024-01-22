@@ -64,9 +64,7 @@ func (p Path) Dir() Path {
 }
 
 // Base returns the last element of p.
-func (p Path) Base() string {
-	return path.Base(p.p)
-}
+func (p Path) Base() string { return path.Base(p.p) }
 
 // Dist returns the distance between two paths in terms of directories traversed
 // to go from one to the other.

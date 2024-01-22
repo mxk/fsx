@@ -6,11 +6,12 @@ import "fmt"
 type Flag byte
 
 const (
-	flagNone Flag = iota   // Zero value
-	flagDup                // File may be removed
-	flagJunk               // File and all of its copies may be removed
-	flagKeep               // File must be preserved
-	flagGone Flag = 1 << 7 // File no longer exists
+	flagNone Flag = iota      // Zero value
+	flagDup                   // File may be removed
+	flagJunk                  // File and all of its copies may be removed
+	flagKeep                  // File must be preserved
+	flagGone Flag = 1 << iota // File no longer exists
+	flagSame                  // File still exists and hasn't changed (runtime only)
 )
 
 const (
@@ -60,7 +61,7 @@ func (a Flag) String() string {
 }
 
 // parseFlag decodes the string representation of file flags.
-func parseFlag(b []byte) (a Flag, ok bool) {
+func parseFlag[T string | []byte](b T) (a Flag, ok bool) {
 	if len(b) == 0 {
 		return flagNone, true
 	}

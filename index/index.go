@@ -24,23 +24,6 @@ type Index struct {
 	groups []Files
 }
 
-// File is a regular file in the file system.
-type File struct {
-	Path
-	Digest  Digest
-	Size    int64
-	ModTime time.Time
-	Flag    Flag
-}
-
-// Files is an ordered list of files.
-type Files []*File
-
-// Sort sorts files by path.
-func (fs Files) Sort() {
-	slices.SortFunc(fs, func(a, b *File) int { return a.Path.cmp(b.Path) })
-}
-
 // New creates a new file index.
 func New(root string, all Files) Index { return Index{root, groupByDigest(all)} }
 
