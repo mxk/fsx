@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 
 	"github.com/zeebo/blake3"
 )
@@ -29,8 +31,12 @@ type Hasher struct {
 // NewHasher returns a new file hasher.
 func NewHasher() *Hasher { return &Hasher{h: *newHash()} }
 
-// Read computes the digest of the specified file.
+// Read computes the digest of the specified file. If fsys is nil, it will be
+// set to the parent directory of name.
 func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
+	if fsys == nil {
+		fsys, name = os.DirFS(filepath.Dir(name)), filepath.Base(name)
+	}
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, fmt.Errorf("index: failed to open file: %s (%w)", name, err)

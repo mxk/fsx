@@ -16,6 +16,18 @@ type File struct {
 	flag    Flag
 }
 
+// Digest returns file digest.
+func (f *File) Digest() Digest { return f.digest }
+
+// Size returns file size.
+func (f *File) Size() int64 { return f.size }
+
+// ModTime returns file modification time.
+func (f *File) ModTime() time.Time { return f.modTime }
+
+// Flag returns file flags.
+func (f *File) Flag() Flag { return f.flag }
+
 // IsSame returns whether the file still has the same name, size, and
 // modification time.
 func (f *File) IsSame(fi fs.FileInfo, err error) bool {
