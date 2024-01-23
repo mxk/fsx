@@ -15,22 +15,26 @@ var _ = indexCli.Add(&cli.Cfg{
 	Summary: "Update file system index",
 	MinArgs: 1,
 	MaxArgs: 1,
-	New:     func() cli.Cmd { return updateCmd{} },
+	New:     func() cli.Cmd { return &updateCmd{} },
 })
 
-type updateCmd struct{}
+type updateCmd struct {
+	Root string `cli:"Change root directory"`
+}
 
-func (updateCmd) Main(args []string) error {
+func (cmd *updateCmd) Main(args []string) error {
 	idx, err := index.Load(args[0])
 	if err != nil {
 		return err
 	}
-	root := idx.Root()
-	if _, err := os.Stat(root); err != nil {
+	if cmd.Root == "" {
+		cmd.Root = idx.Root()
+	}
+	if _, err := os.Stat(cmd.Root); err != nil {
 		return err
 	}
 	var m monitor
-	idx, err = idx.ToTree().Rescan(context.Background(), os.DirFS(root), m.err, m.report)
+	idx, err = idx.ToTree().Rescan(context.Background(), os.DirFS(cmd.Root), m.err, m.report)
 	if err != nil {
 		return err
 	}

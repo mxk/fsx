@@ -14,7 +14,7 @@ import (
 
 var _ = indexCli.Add(&cli.Cfg{
 	Name:    "create|c",
-	Usage:   "<index> <dir>",
+	Usage:   "<index> <root>",
 	Summary: "Create a new file system index",
 	MinArgs: 2,
 	MaxArgs: 2,
