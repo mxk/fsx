@@ -159,7 +159,7 @@ func (w *walker) hash(names <-chan string) {
 	defer w.wg.Done()
 	h := NewHasher()
 	for name := range names {
-		if f, err := h.Read(w.fsys, name); err != nil {
+		if f, err := h.Read(w.fsys, name, true); err != nil {
 			w.werr <- err
 		} else {
 			w.file <- f

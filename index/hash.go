@@ -31,9 +31,10 @@ type Hasher struct {
 // NewHasher returns a new file hasher.
 func NewHasher() *Hasher { return &Hasher{h: *newHash()} }
 
-// Read computes the digest of the specified file. If fsys is nil, it will be
-// set to the parent directory of name.
-func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
+// Read computes the digest of the specified file. If the file is empty and
+// nameFallback is true, it computes the digest of name. If fsys is nil, it is
+// set to the parent directory using os.DirFS.
+func (h *Hasher) Read(fsys fs.FS, name string, nameFallback bool) (*File, error) {
 	if fsys == nil {
 		fsys, name = os.DirFS(filepath.Dir(name)), filepath.Base(name)
 	}
@@ -64,7 +65,7 @@ func (h *Hasher) Read(fsys fs.FS, name string) (*File, error) {
 	if n != fi.Size() {
 		return nil, fmt.Errorf("index: file size mistmach: %s (want %d, got %d)", name, fi.Size(), n)
 	}
-	if n == 0 {
+	if n == 0 && nameFallback {
 		// Zero-length files get a unique hash based on their full name
 		_, _ = h.h.WriteString(name)
 	}

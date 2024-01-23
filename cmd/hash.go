@@ -15,6 +15,7 @@ import (
 var _ = cli.Main.Add(&cli.Cfg{
 	Name:    "hash",
 	Usage:   "file ...",
+	Summary: "Calculate BLAKE3 digests for one or more files",
 	MinArgs: 1,
 	New:     func() cli.Cmd { return &hashCmd{} },
 })
@@ -55,12 +56,12 @@ func (cmd *hashCmd) Main(args []string) error {
 		q.result(r)
 	}
 	if cmd.Cmp && q.err == nil {
-		msg := "Files are identical"
+		what := "identical"
 		if q.diff {
-			msg = "Files are different"
+			what = "different"
 			q.err = cli.ExitCode(1)
 		}
-		_, _ = fmt.Fprintln(os.Stderr, msg)
+		_, _ = fmt.Fprintln(os.Stderr, "Files are", what)
 	}
 	return q.err
 }
@@ -110,7 +111,7 @@ type hashResult struct {
 
 func hash(h *index.Hasher, names []string, i int) *hashResult {
 	r := &hashResult{i: i, name: filepath.Clean(names[i])}
-	r.File, r.err = h.Read(nil, r.name)
+	r.File, r.err = h.Read(nil, r.name, false)
 	return r
 }
 

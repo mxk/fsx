@@ -41,7 +41,7 @@ func TestHasher(t *testing.T) {
 	var have Files
 	err := fs.WalkDir(fsys, ".", func(name string, e fs.DirEntry, err error) error {
 		if require.NoError(t, err); !e.IsDir() {
-			f, err := h.Read(fsys, name)
+			f, err := h.Read(fsys, name, true)
 			require.NoError(t, err)
 			have = append(have, f)
 		}
