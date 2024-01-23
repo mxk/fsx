@@ -23,7 +23,7 @@ DX	e 		//										2009-11-11T23:00:01Z
 		0300000000000000000000000000000000000000000000000000000000000000	3
 `
 
-func TestIndex(t *testing.T) {
+func TestIndexReadWrite(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
 	t0 := time.Date(2009, 11, 10, 23, 00, 00, 0, time.UTC)
 	t1 := time.Date(2009, 11, 11, 23, 00, 01, 0, time.UTC)
@@ -44,7 +44,7 @@ func TestIndex(t *testing.T) {
 		}},
 	}
 
-	// Without compression
+	// Text format without compression
 	var buf bytes.Buffer
 	require.NoError(t, want.write(&buf))
 	require.Equal(t, testIdx, buf.String())
@@ -52,7 +52,7 @@ func TestIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, want, have)
 
-	// With compression
+	// Roundtrip with compression
 	buf.Reset()
 	require.NoError(t, want.Write(&buf))
 	have, err = Read(&buf)

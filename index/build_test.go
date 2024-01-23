@@ -10,29 +10,59 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zeebo/blake3"
 )
 
-func TestBuild(t *testing.T) {
-	const testVec = "\x00\x01"
-	d1 := testDigest(t, "2d3adedff11b61f14c886e35afa036736dcd87a74d27b5c1510225d0f592e213")
-	d2 := testDigest(t, "7b7015bb92cf0b318037702a6cdd81dee41224f734684c2c122cd6359cb1ee63")
+func TestScan(t *testing.T) {
+	b1, d1 := testData("\x00")
+	b2, d2 := testData("\x00\x01")
+	b3, d3 := testData("\x00\x01\x02")
 	t1 := time.Now()
 	t2 := t1.Add(-time.Hour)
 	fsys := fstest.MapFS{
-		"b/c": &fstest.MapFile{Data: []byte(testVec[:1]), ModTime: t1},
-		"b/d": &fstest.MapFile{Data: []byte(testVec[:2]), ModTime: t2},
-		"a":   &fstest.MapFile{Data: []byte(testVec[:1]), ModTime: t2},
+		"X/a": &fstest.MapFile{Data: b1, ModTime: t1},
+		"X/b": &fstest.MapFile{Data: b2, ModTime: t2},
+		"Y/c": &fstest.MapFile{Data: b1, ModTime: t2},
+		"d":   &fstest.MapFile{Data: b3, ModTime: t1},
 	}
-	idx, err := Build(context.Background(), fsys, nil, nil)
+	idx, err := Scan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
-	want := Index{
-		groups: []Files{{
-			{Path{"b/c"}, d1, 1, t1, flagNone},
-			{Path{"a"}, d1, 1, t2, flagNone},
+	want := Index{groups: []Files{
+		{
+			{Path{"X/a"}, d1, 1, t1, flagNone},
+			{Path{"Y/c"}, d1, 1, t2, flagNone},
 		}, {
-			{Path{"b/d"}, d2, 2, t2, flagNone},
-		}},
-	}
+			{Path{"X/b"}, d2, 2, t2, flagNone},
+		}, {
+			{Path{"d"}, d3, 3, t1, flagNone},
+		},
+	}}
+	assert.Equal(t, want, idx)
+
+	// Remove, modify, and create files
+	delete(fsys, "X/a")
+	delete(fsys, "Y/c")
+	fsys["X/b"].Data = b3
+	fsys["e"] = &fstest.MapFile{Data: b1, ModTime: t2}
+
+	// Rescan
+	tr := idx.ToTree()
+	tr.file(Path{"X/a"}).flag = flagJunk
+	tr.file(Path{"X/b"}).flag = flagKeep
+	tr.file(Path{"d"}).flag = flagDup
+	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
+	require.NoError(t, err)
+	want = Index{groups: []Files{
+		{
+			{Path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
+			{Path{"e"}, d1, 1, t2, flagNone},
+		}, {
+			{Path{"X/b"}, d3, 3, t2, flagNone},
+			{Path{"d"}, d3, 3, t1, flagDup | flagSame},
+		}, {
+			{Path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
+		},
+	}}
 	assert.Equal(t, want, idx)
 }
 
@@ -60,4 +90,9 @@ func TestDirFSRoot(t *testing.T) {
 	_, err := fsys.Open(".")
 	assert.NoError(t, err)
 	assert.Empty(t, dirFSRoot(fsys))
+}
+
+func testData(s string) ([]byte, Digest) {
+	b := []byte(s)
+	return b, blake3.Sum256(b)
 }

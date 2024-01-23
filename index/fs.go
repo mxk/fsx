@@ -1,6 +1,7 @@
 package index
 
 import (
+	"cmp"
 	"io/fs"
 	"slices"
 	"strings"
@@ -46,13 +47,28 @@ func (f *File) canIgnore() bool {
 		strings.EqualFold(name, "desktop.ini")
 }
 
+// cmp returns -1 if f < other, 0 if f == other, and +1 if f > other.
+func (f *File) cmp(other *File) int {
+	if c := f.Path.cmp(other.Path); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(f.flag&flagGone, other.flag&flagGone); c != 0 {
+		return c
+	}
+	if c := f.modTime.Compare(other.modTime); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(f.flag&flagKeep, other.flag&flagKeep); c != 0 {
+		return c
+	}
+	return cmp.Compare(f.size, other.size)
+}
+
 // Files is an ordered list of files.
 type Files []*File
 
 // Sort sorts files by path.
-func (fs Files) Sort() {
-	slices.SortStableFunc(fs, func(a, b *File) int { return a.Path.cmp(b.Path) })
-}
+func (fs Files) Sort() { slices.SortFunc(fs, (*File).cmp) }
 
 // Dir is a directory in the file system.
 type Dir struct {

@@ -11,7 +11,9 @@ const (
 	flagJunk                  // File and all of its copies may be removed
 	flagKeep                  // File must be preserved
 	flagGone Flag = 1 << iota // File no longer exists
-	flagSame                  // File still exists and hasn't changed (runtime only)
+	flagSame                  // File exists and hasn't changed (runtime only)
+
+	flagRuntime = flagSame // Runtime only flags
 )
 
 const (
@@ -38,7 +40,7 @@ func (a Flag) MayRemove() bool { return a&flagKeep == flagDup || a&flagKeep == f
 
 // String returns the string representation of file flags.
 func (a Flag) String() string {
-	switch a {
+	switch a &^ flagRuntime {
 	case flagNone:
 		return ""
 	case flagDup:

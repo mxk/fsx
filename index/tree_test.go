@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTree(t *testing.T) {
+func TestToTree(t *testing.T) {
 	d1, d2, d3, d4, d5 := Digest{1}, Digest{2}, Digest{3}, Digest{4}, Digest{5}
 
 	a1 := &File{digest: d1, Path: Path{"a1"}}
@@ -19,10 +19,11 @@ func TestTree(t *testing.T) {
 	c2 := &File{digest: d3, Path: Path{"C/F/c2"}}
 	x1 := &File{digest: d4, Path: Path{"C/.git/X/x1"}}
 	y1 := &File{digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}}
+	yX := &File{digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}, flag: flagGone}
 
 	idx := Index{
 		root:   "/",
-		groups: []Files{{a1, a2, a3}, {b1, b2}, {c1, c2}, {x1}, {y1}},
+		groups: []Files{{a1, a2, a3}, {b1, b2}, {c1, c2}, {x1}, {y1, yX}},
 	}
 
 	Z := &Dir{
@@ -110,7 +111,7 @@ func TestTree(t *testing.T) {
 			d2: {b1, b2},
 			d3: {c1, c2},
 			d4: {x1},
-			d5: {y1},
+			d5: {y1, yX},
 		},
 	}
 

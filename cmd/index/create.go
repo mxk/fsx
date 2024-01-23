@@ -26,7 +26,7 @@ type createCmd struct{}
 func (createCmd) Main(args []string) error {
 	root := filepath.Clean(args[1])
 	var m monitor
-	idx, err := index.Build(context.Background(), os.DirFS(root), m.err, m.report)
+	idx, err := index.Scan(context.Background(), os.DirFS(root), m.err, m.report)
 	if err != nil {
 		return err
 	}

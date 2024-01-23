@@ -15,16 +15,26 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-// Build builds an index of fsys. If errFn is non-nil, it is called for any
+// Scan creates an index of fsys. If errFn is non-nil, it is called for any
 // file-specific errors. If progFn is non-nil, it is called at regular intervals
 // to report progress. A non-nil error is returned if ctx is canceled.
-func Build(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
-	return (*Tree)(nil).Reindex(ctx, fsys, errFn, progFn)
+func Scan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+	return (*Tree)(nil).Rescan(ctx, fsys, errFn, progFn)
 }
 
-// Reindex updates the index of fsys, skipping the hashing of any files that
-// have identical names, sizes, and modification times. See Build for more info.
-func (t *Tree) Reindex(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+// Rescan updates the index of fsys, skipping the hashing of any files that have
+// identical names, sizes, and modification times. See Scan for more info.
+func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+	// Clear runtime flags
+	if t != nil {
+		for _, g := range t.idx {
+			for _, f := range g {
+				f.flag &^= flagRuntime
+			}
+		}
+	}
+
+	// Setup workers and progress
 	file := make(chan *File, 1)
 	var werr chan error
 	if errFn != nil {
@@ -42,14 +52,14 @@ func (t *Tree) Reindex(ctx context.Context, fsys fs.FS, errFn func(error), progF
 		prog.reset(time.Now())
 	}
 
-	// Receive files from the walker goroutines
+	// Receive files from walk and hash goroutines
 	all := make(Files, 0, 64)
-walk:
+recv:
 	for {
 		select {
 		case f, ok := <-file:
 			if !ok {
-				break walk
+				break recv
 			}
 			if all = append(all, f); progTick != nil {
 				prog.fileDone(time.Now(), f.size)
@@ -67,24 +77,19 @@ walk:
 	}
 	select {
 	case <-ctx.Done():
-		if t != nil {
-			for _, f := range all {
-				f.flag &^= flagSame
-			}
-		}
 		return Index{}, ctx.Err()
 	default:
 	}
 
-	// Copy over non-existent files
+	// Copy over removed and modified files that have important flags
 	if t != nil {
 		for _, g := range t.idx {
 			for _, f := range g {
-				if f.flag&flagSame != 0 {
-					f.flag &^= flagSame
-				} else if f.flag != 0 {
+				if f.flag&flagSame == 0 {
 					f.flag |= flagGone
-					all = append(all, f)
+					if f.flag&^(flagGone|flagRuntime) != 0 {
+						all = append(all, f)
+					}
 				}
 			}
 		}
@@ -132,6 +137,7 @@ func (w *walker) walk(ctx context.Context) {
 		}
 		if e.Type().IsRegular() {
 			if w.ref != nil {
+				// TODO: Is changing case a problem?
 				if f := w.ref.file(Path{name}); f != nil && f.IsSame(e.Info()) {
 					f.flag |= flagSame
 					w.file <- f
@@ -142,7 +148,7 @@ func (w *walker) walk(ctx context.Context) {
 		} else if !e.IsDir() {
 			w.err(fmt.Errorf("index: not a regular file or directory: %s", name))
 		}
-		return err
+		return nil
 	})
 	if err != nil {
 		w.err(fmt.Errorf("index: walk error: %w", err))
@@ -159,6 +165,7 @@ func (w *walker) hash(names <-chan string) {
 	defer w.wg.Done()
 	h := NewHasher()
 	for name := range names {
+		// TODO: Cancellation
 		if f, err := h.Read(w.fsys, name, true); err != nil {
 			w.werr <- err
 		} else {

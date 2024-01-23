@@ -30,7 +30,7 @@ func (updateCmd) Main(args []string) error {
 		return err
 	}
 	var m monitor
-	idx, err = idx.ToTree().Reindex(context.Background(), os.DirFS(root), m.err, m.report)
+	idx, err = idx.ToTree().Rescan(context.Background(), os.DirFS(root), m.err, m.report)
 	if err != nil {
 		return err
 	}
