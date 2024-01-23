@@ -15,7 +15,6 @@ func TestFlag(t *testing.T) {
 		{"D", flagDup},
 		{"J", flagJunk},
 		{"K", flagKeep},
-		{"X", flagGone},
 		{"DX", flagDup | flagGone},
 		{"JX", flagJunk | flagGone},
 		{"KX", flagKeep | flagGone},
@@ -27,9 +26,11 @@ func TestFlag(t *testing.T) {
 		assert.Equal(t, tc.s, tc.f.String(), "%q", tc)
 	}
 
-	_, ok := parseFlag("XX")
+	_, ok := parseFlag("X")
 	assert.False(t, ok)
-	assert.Panics(t, func() { _ = Flag(64).String() })
+	_, ok = parseFlag("XX")
+	assert.False(t, ok)
+	assert.Panics(t, func() { _ = flagGone.String() })
 
 	assert.True(t, flagDup.IsDup())
 	assert.False(t, flagDup.IsJunk())

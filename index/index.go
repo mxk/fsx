@@ -185,17 +185,29 @@ func (idx *Index) write(dst io.Writer) error {
 	lineWidth := make([]int, 0, 16)
 	for _, g := range idx.groups {
 		// Calculate path widths
+		empty := true
 		align, lineWidth := minAlign, lineWidth[:0]
 		for _, f := range g {
-			n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
-			align, lineWidth = max(align, n), append(lineWidth, n)
+			if f.flag.persist() {
+				empty = false
+				n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
+				align, lineWidth = max(align, n), append(lineWidth, n)
+			} else {
+				lineWidth = append(lineWidth, 0)
+			}
 			if f.digest != g[0].digest || f.size != g[0].size {
 				panic(fmt.Sprintf("index: group digest/size mismatch: %s", f))
 			}
 		}
+		if empty {
+			continue
+		}
 
 		// Flags, paths, and modification times
 		for i, f := range g {
+			if !f.flag.persist() {
+				continue
+			}
 			_, _ = w.WriteString(f.flag.String())
 			_ = w.WriteByte('\t')
 			_, _ = w.WriteString(f.p)

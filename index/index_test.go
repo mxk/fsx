@@ -36,6 +36,9 @@ func TestIndexReadWrite(t *testing.T) {
 			{Path{"a"}, d1, 1, t0, flagNone},
 		}, {
 			{Path{"b"}, d2, 2, t1, flagNone},
+			{Path{"gone1"}, d2, 2, t1, flagGone},
+		}, {
+			{Path{"gone2"}, d2, 2, t1, flagGone},
 		}, {
 			{Path{"c"}, d3, 3, t0, flagNone},
 			{Path{"d\t"}, d3, 3, t0, flagDup},
@@ -50,6 +53,8 @@ func TestIndexReadWrite(t *testing.T) {
 	require.Equal(t, testIdx, buf.String())
 	have, err := read(&buf)
 	require.NoError(t, err)
+	want.groups[1] = want.groups[1][:1]
+	want.groups = append(want.groups[:2], want.groups[3])
 	require.Equal(t, want, have)
 
 	// Roundtrip with compression

@@ -38,9 +38,12 @@ func (a Flag) IsGone() bool { return a&flagGone != 0 }
 // MayRemove returns whether the file may be removed.
 func (a Flag) MayRemove() bool { return a&flagKeep == flagDup || a&flagKeep == flagJunk }
 
+// persist returns whether the file should be written to the index.
+func (a Flag) persist() bool { return a&flagGone == 0 || a&flagKeep != 0 }
+
 // String returns the string representation of file flags.
 func (a Flag) String() string {
-	switch a &^ flagRuntime {
+	switch a & (flagKeep | flagGone) {
 	case flagNone:
 		return ""
 	case flagDup:
@@ -49,8 +52,6 @@ func (a Flag) String() string {
 		return "J"
 	case flagKeep:
 		return "K"
-	case flagGone:
-		return "X"
 	case flagDup | flagGone:
 		return "DX"
 	case flagJunk | flagGone:
@@ -69,9 +70,7 @@ func parseFlag[T string | []byte](b T) (a Flag, ok bool) {
 	}
 	ok = len(b) == 1
 	if b[len(b)-1] == flagGoneS {
-		if a = flagGone; ok {
-			return
-		}
+		a = flagGone
 		ok = len(b) == 2
 	}
 	switch b[0] {
