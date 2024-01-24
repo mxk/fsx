@@ -30,7 +30,6 @@ func TestFlag(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = parseFlag("XX")
 	assert.False(t, ok)
-	assert.Panics(t, func() { _ = flagGone.String() })
 
 	assert.True(t, flagDup.IsDup())
 	assert.False(t, flagDup.IsJunk())

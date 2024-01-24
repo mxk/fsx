@@ -23,13 +23,14 @@ func Scan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progr
 }
 
 // Rescan updates the index of fsys, skipping the hashing of any files that have
-// identical names, sizes, and modification times. See Scan for more info.
+// identical names, sizes, and modification times. See Scan for more info. Tree
+// t should not be accessed after this operation.
 func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
-	// Clear runtime flags
+	// Clear non-persistent flags
 	if t != nil {
 		for _, g := range t.idx {
 			for _, f := range g {
-				f.flag &^= flagRuntime
+				f.flag &= flagPersist
 			}
 		}
 	}
@@ -40,16 +41,15 @@ func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn
 	if errFn != nil {
 		werr = make(chan error, 1)
 	}
-	w := walker{ref: t, fsys: fsys, file: file, werr: werr}
-	go w.walk(ctx)
+	go (&walker{fsys: fsys, file: file, werr: werr}).walk(ctx, t)
 
-	var prog Progress
+	var prog *Progress
 	var progTick <-chan time.Time
 	if progFn != nil {
+		prog = newProgress(time.Now())
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		progTick = t.C
-		prog.reset(time.Now())
 	}
 
 	// Receive files from walk and hash goroutines
@@ -61,19 +61,19 @@ recv:
 			if !ok {
 				break recv
 			}
-			if all = append(all, f); progTick != nil {
+			if all = append(all, f); prog != nil {
 				prog.fileDone(time.Now(), f.size)
 			}
 		case err := <-werr:
 			errFn(err)
 		case <-progTick:
-			progFn(&prog)
+			progFn(prog)
 		}
 	}
-	if progTick != nil {
+	if prog != nil {
 		prog.final = true
 		prog.update(time.Now())
-		progFn(&prog)
+		progFn(prog)
 	}
 	select {
 	case <-ctx.Done():
@@ -81,15 +81,18 @@ recv:
 	default:
 	}
 
-	// Copy over removed and modified files that have important flags
+	// all describes current contents of fsys. Files marked flagSame are shared
+	// with t. All other files in t have been either removed or modified, so we
+	// mark them with flagGone. Those that have any flagKeep flags are copied
+	// over to preserve prior decisions.
 	if t != nil {
 		for _, g := range t.idx {
 			for _, f := range g {
-				if f.flag&flagSame == 0 {
-					f.flag |= flagGone
-					if f.flag&^(flagGone|flagRuntime) != 0 {
-						all = append(all, f)
-					}
+				if f.flag&flagSame != 0 {
+					continue // Already in all
+				}
+				if f.flag |= flagGone; f.flag&flagKeep != 0 {
+					all = append(all, f)
 				}
 			}
 		}
@@ -100,23 +103,22 @@ recv:
 
 // walker walks the file system, hashing all regular files.
 type walker struct {
-	ref  *Tree
 	fsys fs.FS
 	file chan<- *File
 	werr chan<- error
 	wg   sync.WaitGroup
 }
 
-func (w *walker) walk(ctx context.Context) {
-	names := make(chan string, 1)
+func (w *walker) walk(ctx context.Context, t *Tree) {
+	hash := make(chan string, 1)
 	defer func() {
-		close(names)
+		close(hash)
 		w.wg.Wait()
 		close(w.file)
 	}()
 	for n := runtime.NumCPU(); n > 0; n-- {
 		w.wg.Add(1)
-		go w.hash(names)
+		go w.hash(hash)
 	}
 	cancel := ctx.Done()
 	err := fs.WalkDir(w.fsys, ".", func(name string, e fs.DirEntry, err error) error {
@@ -136,15 +138,14 @@ func (w *walker) walk(ctx context.Context) {
 			return fs.SkipDir
 		}
 		if e.Type().IsRegular() {
-			if w.ref != nil {
-				// TODO: Is changing case a problem?
-				if f := w.ref.file(Path{name}); f != nil && f.IsSame(e.Info()) {
-					f.flag |= flagSame
+			if t != nil {
+				if f := t.file(Path{name}); f != nil && f.isSame(e.Info()) {
+					f.flag = f.flag&^flagGone | flagSame
 					w.file <- f
 					return nil
 				}
 			}
-			names <- name
+			hash <- name
 		} else if !e.IsDir() {
 			w.err(fmt.Errorf("index: not a regular file or directory: %s", name))
 		}
@@ -152,12 +153,6 @@ func (w *walker) walk(ctx context.Context) {
 	})
 	if err != nil {
 		w.err(fmt.Errorf("index: walk error: %w", err))
-	}
-}
-
-func (w *walker) err(err error) {
-	if w.werr != nil {
-		w.werr <- err
 	}
 }
 
@@ -174,6 +169,12 @@ func (w *walker) hash(names <-chan string) {
 	}
 }
 
+func (w *walker) err(err error) {
+	if w.werr != nil {
+		w.werr <- err
+	}
+}
+
 // Progress reports file indexing progress.
 type Progress struct {
 	start    time.Time
@@ -187,9 +188,9 @@ type Progress struct {
 	final    bool
 }
 
-// reset resets progress to the specified start time.
-func (p *Progress) reset(start time.Time) {
-	*p = Progress{start: start, now: start}
+// newProgress creates a new Progress with the specified start time.
+func newProgress(start time.Time) *Progress {
+	return &Progress{start: start, now: start}
 }
 
 // Time returns the time when the progress was last updated.

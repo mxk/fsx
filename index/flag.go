@@ -1,19 +1,16 @@
 package index
 
-import "fmt"
-
 // Flag specifies file flags.
 type Flag byte
 
 const (
-	flagNone Flag = iota      // Zero value
+	flagNone    Flag = iota   // Zero value
 	flagDup                   // File may be removed
 	flagJunk                  // File and all of its copies may be removed
-	flagKeep                  // File must be preserved
-	flagGone Flag = 1 << iota // File no longer exists
-	flagSame                  // File exists and hasn't changed (runtime only)
-
-	flagRuntime = flagSame // Runtime only flags
+	flagKeep                  // File must be preserved (value and mask)
+	flagGone    Flag = 1 << 2 // File no longer exists
+	flagSame    Flag = 1 << 4 // File exists and hasn't changed (runtime only)
+	flagPersist Flag = 0x0F   // Persistent flags
 )
 
 const (
@@ -43,9 +40,7 @@ func (a Flag) persist() bool { return a&flagGone == 0 || a&flagKeep != 0 }
 
 // String returns the string representation of file flags.
 func (a Flag) String() string {
-	switch a & (flagKeep | flagGone) {
-	case flagNone:
-		return ""
+	switch a & flagPersist {
 	case flagDup:
 		return "D"
 	case flagJunk:
@@ -59,7 +54,7 @@ func (a Flag) String() string {
 	case flagKeep | flagGone:
 		return "KX"
 	default:
-		panic(fmt.Sprintf("index: invalid flag value: 0x%X", byte(a)))
+		return ""
 	}
 }
 
@@ -68,10 +63,8 @@ func parseFlag[T string | []byte](b T) (a Flag, ok bool) {
 	if len(b) == 0 {
 		return flagNone, true
 	}
-	ok = len(b) == 1
-	if b[len(b)-1] == flagGoneS {
-		a = flagGone
-		ok = len(b) == 2
+	if ok = len(b) == 1; b[len(b)-1] == flagGoneS {
+		a, ok = flagGone, len(b) == 2
 	}
 	switch b[0] {
 	case flagDupS:

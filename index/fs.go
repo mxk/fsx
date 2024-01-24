@@ -29,9 +29,9 @@ func (f *File) ModTime() time.Time { return f.modTime }
 // Flag returns file flags.
 func (f *File) Flag() Flag { return f.flag }
 
-// IsSame returns whether the file still has the same name, size, and
+// isSame returns whether the file still has the same name, size, and
 // modification time.
-func (f *File) IsSame(fi fs.FileInfo, err error) bool {
+func (f *File) isSame(fi fs.FileInfo, err error) bool {
 	return err == nil && fi.Mode().IsRegular() && fi.Size() == f.size &&
 		fi.ModTime().Equal(f.modTime)
 }
@@ -67,7 +67,7 @@ func (f *File) cmp(other *File) int {
 // Files is an ordered list of files.
 type Files []*File
 
-// Sort sorts files by path.
+// Sort sorts files by path and other attributes.
 func (fs Files) Sort() { slices.SortFunc(fs, (*File).cmp) }
 
 // Dir is a directory in the file system.

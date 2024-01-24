@@ -37,7 +37,7 @@ func TestScan(t *testing.T) {
 			{Path{"d"}, d3, 3, t1, flagNone},
 		},
 	}}
-	assert.Equal(t, want, idx)
+	require.Equal(t, want, idx)
 
 	// Remove, modify, and create files
 	delete(fsys, "X/a")
@@ -63,16 +63,60 @@ func TestScan(t *testing.T) {
 			{Path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
 		},
 	}}
-	assert.Equal(t, want, idx)
+	require.Equal(t, want, idx)
+
+	// Restore original X/b and touch d
+	fsys["X/b"].Data = b2
+	fsys["d"].ModTime = t2
+
+	// Rescan
+	tr = idx.ToTree()
+	tr.file(Path{"e"}).flag |= flagDup | flagGone
+	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
+	require.NoError(t, err)
+	want = Index{groups: []Files{
+		{
+			{Path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
+			{Path{"e"}, d1, 1, t2, flagDup | flagSame},
+		}, {
+			{Path{"X/b"}, d2, 2, t2, flagNone},
+			{Path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
+		}, {
+			{Path{"d"}, d3, 3, t2, flagNone},
+			{Path{"d"}, d3, 3, t1, flagDup | flagGone},
+		},
+	}}
+	require.Equal(t, want, idx)
+
+	// Verify Tree structure
+	X := &Dir{
+		Path:        Path{"X/"},
+		files:       Files{idx.groups[1][0]},
+		uniqueFiles: 1,
+	}
+	root := &Dir{
+		Path:        Root,
+		dirs:        Dirs{X},
+		files:       Files{idx.groups[2][0], idx.groups[0][1]},
+		uniqueFiles: 3,
+	}
+	wantTree := &Tree{
+		dirs: map[Path]*Dir{Root: root, X.Path: X},
+		idx: map[Digest]Files{
+			d1: want.groups[0],
+			d2: want.groups[1],
+			d3: want.groups[2],
+		},
+	}
+	require.Equal(t, wantTree, idx.ToTree())
 }
 
 func TestProgress(t *testing.T) {
-	var p Progress
+	t0 := time.Date(2006, 01, 02, 15, 04, 05, 00, time.UTC)
+	p := newProgress(t0)
 	want := "Indexed 0 files (0 B) in 0s [0 files/sec, 0 B/sec]"
 	require.Equal(t, want, p.String())
 
-	t0 := time.Date(2006, 01, 02, 15, 04, 05, 00, time.UTC)
-	p.reset(t0)
 	p.fileDone(t0.Add(time.Second), 128)
 	want = "Indexed 1 files (128 B) in 1s [1 files/sec, 128 B/sec]"
 	require.Equal(t, want, p.String())

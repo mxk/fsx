@@ -39,8 +39,8 @@ func Load(name string) (Index, error) {
 		}
 	}()
 	idx, err := Read(f)
-	f, err2 := nil, f.Close()
-	if err == nil {
+	err2 := f.Close()
+	if f = nil; err == nil {
 		err = err2
 	}
 	return idx, err
@@ -180,6 +180,7 @@ func (idx *Index) write(dst io.Writer) error {
 		}
 		return
 	}
+
 	w := bufio.NewWriter(dst)
 	idx.writeHeader(w)
 	lineWidth := make([]int, 0, 16)
