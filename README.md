@@ -37,9 +37,12 @@ header     =  version LF root-path LF
 version    =  "fsx index v1"           ; File format signature and version
 root-path  =  *( path-step / "/" )     ; Index root path
 
-group      =  1*( file LF ) attr LF
-file       =  [ file-flag ] HTAB rel-path [ path-term [ *HTAB mtime ] ]
+group      =  file LF *( file-cont LF ) attr LF
 attr       =  2HTAB digest HTAB size
+
+file       =  file-path path-term *HTAB mtime
+file-cont  =  file-path [ path-term [ *HTAB mtime ] ]
+file-path  =  [ file-flag ] HTAB rel-path
 
 file-flag  =  "D" [ "X" ]  ; Duplicate (this copy may be removed)
 file-flag  =/ "J" [ "X" ]  ; Junk (all copies may be removed)
