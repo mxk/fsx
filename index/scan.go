@@ -133,8 +133,8 @@ func (w *walker) walk(ctx context.Context, t *Tree) {
 			w.err(fmt.Errorf("index: walk error: %s (%w)", name, err))
 			return nil
 		}
-		if strings.IndexByte(name, '\n') >= 0 {
-			w.err(fmt.Errorf("index: new line in path: %q", name))
+		if len(name) == 0 || name[0] == '\t' || strings.IndexByte(name, '\n') >= 0 {
+			w.err(fmt.Errorf("index: unsupported file path: %q", name))
 			return fs.SkipDir
 		}
 		if e.Type().IsRegular() {
