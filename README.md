@@ -35,19 +35,19 @@ index      =  header *group
 
 header     =  version LF root-path LF
 version    =  "fsx index v1"           ; File format signature and version
-root-path  =  *(path-step / "/")       ; Index root path
+root-path  =  *( path-step / "/" )     ; Index root path
 
-group      =  1*(file LF) attr LF
-file       =  [file-flag] HTAB rel-path [path-term [*HTAB mtime]]
+group      =  1*( file LF ) attr LF
+file       =  [ file-flag ] HTAB rel-path [ path-term [ *HTAB mtime ] ]
 attr       =  2HTAB digest HTAB size
 
-file-flag  =  "D" ["X"]  ; Duplicate (this copy may be removed)
-file-flag  =/ "J" ["X"]  ; Junk (all copies may be removed)
-file-flag  =/ "K" ["X"]  ; Keep (this copy should be preserved)
-                         ; "X" indicates that file no longer exists
+file-flag  =  "D" [ "X" ]  ; Duplicate (this copy may be removed)
+file-flag  =/ "J" [ "X" ]  ; Junk (all copies may be removed)
+file-flag  =/ "K" [ "X" ]  ; Keep (this copy should be preserved)
+                           ; "X" indicates that file no longer exists
 
-rel-path   =  path-step *("/" path-step)       ; Relative UTF-8 slash-separated file path
-path-step  =  1*(%x00–09 / %x0B–2E / %x30–FF)  ; Any byte except LF and "/"
+rel-path   =  path-step *( "/" path-step )       ; Relative UTF-8 slash-separated file path
+path-step  =  1*( %x00-09 / %x0B-2E / %x30-FF )  ; Any byte except LF and "/"
 
 path-term  =  HTAB "//"  ; Terminator added to unambiguously separate the path
                          ; from the modification time. It is also added if the
