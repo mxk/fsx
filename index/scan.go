@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -35,22 +36,32 @@ func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn
 		}
 	}
 
-	// Setup workers and progress
+	// Setup progress tracking
+	var prog *Progress
+	var progTick <-chan time.Time
+	if progFn != nil {
+		prog = newProgress(time.Now())
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		progTick = t.C
+	}
+
+	// Start walker and hasher goroutines
 	file := make(chan *File, 1)
 	var werr chan error
 	if errFn != nil {
 		werr = make(chan error, 1)
 	}
-	go (&walker{fsys: fsys, file: file, werr: werr}).walk(ctx, t)
-
-	var prog *Progress
-	var progTick <-chan time.Time
-	if progFn != nil {
-		prog = newProgress(time.Now())
-		t := time.NewTicker(time.Minute)
-		defer t.Stop()
-		progTick = t.C
-	}
+	cp := ctxPoller(ctx.Done())
+	go (&walker{fsys: fsys, file: file, werr: werr}).walk(cp, t, func(n int) error {
+		if prog != nil {
+			prog.sampleBytes.Add(uint64(n))
+		}
+		if !cp.canceled() {
+			return nil
+		}
+		return context.Canceled
+	})
 
 	// Receive files from walk and hash goroutines
 	all := make(Files, 0, 64)
@@ -62,11 +73,12 @@ recv:
 				break recv
 			}
 			if all = append(all, f); prog != nil {
-				prog.fileDone(time.Now(), f.size)
+				prog.sampleFiles++
 			}
 		case err := <-werr:
 			errFn(err)
-		case <-progTick:
+		case now := <-progTick:
+			prog.update(now)
 			progFn(prog)
 		}
 	}
@@ -75,10 +87,8 @@ recv:
 		prog.update(time.Now())
 		progFn(prog)
 	}
-	select {
-	case <-ctx.Done():
+	if cp.canceled() {
 		return Index{}, ctx.Err()
-	default:
 	}
 
 	// all describes current contents of fsys. Files marked flagSame are shared
@@ -109,7 +119,7 @@ type walker struct {
 	wg   sync.WaitGroup
 }
 
-func (w *walker) walk(ctx context.Context, t *Tree) {
+func (w *walker) walk(cp ctxPoller, t *Tree, mon func(int) error) {
 	hash := make(chan string, 1)
 	defer func() {
 		close(hash)
@@ -118,16 +128,11 @@ func (w *walker) walk(ctx context.Context, t *Tree) {
 	}()
 	for n := runtime.NumCPU(); n > 0; n-- {
 		w.wg.Add(1)
-		go w.hash(hash)
+		go w.hash(hash, mon)
 	}
-	cancel := ctx.Done()
 	err := fs.WalkDir(w.fsys, ".", func(name string, e fs.DirEntry, err error) error {
-		if cancel != nil {
-			select {
-			case <-cancel:
-				return fs.SkipAll
-			default:
-			}
+		if cp.canceled() {
+			return fs.SkipAll
 		}
 		if err != nil {
 			w.err(fmt.Errorf("index: walk error: %s (%w)", name, err))
@@ -156,15 +161,14 @@ func (w *walker) walk(ctx context.Context, t *Tree) {
 	}
 }
 
-func (w *walker) hash(names <-chan string) {
+func (w *walker) hash(names <-chan string, mon func(int) error) {
 	defer w.wg.Done()
-	h := NewHasher(nil)
+	h := NewHasher(mon)
 	for name := range names {
-		// TODO: Cancellation
-		if f, err := h.Read(w.fsys, name, true); err != nil {
-			w.werr <- err
-		} else {
+		if f, err := h.Read(w.fsys, name, true); err == nil {
 			w.file <- f
+		} else if err != context.Canceled {
+			w.err(err)
 		}
 	}
 }
@@ -175,23 +179,41 @@ func (w *walker) err(err error) {
 	}
 }
 
+// ctxPoller simplifies polling context.Context for cancellation.
+type ctxPoller <-chan struct{}
+
+func (p ctxPoller) canceled() bool {
+	if p != nil {
+		select {
+		case <-p:
+			return true
+		default:
+		}
+	}
+	return false
+}
+
 // Progress reports file indexing progress.
 type Progress struct {
-	start    time.Time
-	now      time.Time
-	files    uint64
-	bytes    uint64
-	newFiles uint64
-	newBytes uint64
-	fps      float64
-	bps      float64
-	final    bool
+	sampleFiles uint64
+	sampleBytes atomic.Uint64
+
+	start time.Time
+	now   time.Time
+	files uint64
+	bytes uint64
+	fps   float64
+	bps   float64
+	final bool
 }
 
 // newProgress creates a new Progress with the specified start time.
 func newProgress(start time.Time) *Progress {
 	return &Progress{start: start, now: start}
 }
+
+// Start returns the start time of the operation.
+func (p *Progress) Start() time.Time { return p.start }
 
 // Time returns the time when the progress was last updated.
 func (p *Progress) Time() time.Time { return p.now }
@@ -207,30 +229,23 @@ func (p *Progress) String() string {
 		p.files, bytes, dur, p.fps, bps)
 }
 
-func (p *Progress) fileDone(now time.Time, bytes int64) {
-	p.newFiles++
-	p.newBytes += uint64(bytes)
-	if now.Sub(p.now) >= time.Second {
-		p.update(now)
-	}
-}
-
 func (p *Progress) update(now time.Time) {
+	sampleBytes := p.sampleBytes.Swap(0)
 	sec := now.Sub(p.now).Seconds()
 	if sec <= 0 {
+		p.sampleBytes.Add(sampleBytes)
 		return
 	}
-	alpha := min(sec/60, 1)
+	alpha := min(sec/10, 1)
 	if p.start.Equal(p.now) {
 		alpha = 1 // First sample
 	}
 	p.now = now
-	p.files += p.newFiles
-	p.bytes += p.newBytes
-	p.fps = (1-alpha)*p.fps + alpha*(float64(p.newFiles)/sec)
-	p.bps = (1-alpha)*p.bps + alpha*(float64(p.newBytes)/sec)
-	p.newFiles = 0
-	p.newBytes = 0
+	p.files += p.sampleFiles
+	p.bytes += sampleBytes
+	p.fps = (1-alpha)*p.fps + alpha*(float64(p.sampleFiles)/sec)
+	p.bps = (1-alpha)*p.bps + alpha*(float64(sampleBytes)/sec)
+	p.sampleFiles = 0
 }
 
 // dirFSRoot returns the root directory name if fsys refers to the local file

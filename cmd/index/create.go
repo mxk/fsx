@@ -48,8 +48,11 @@ func (m *monitor) err(err error) {
 }
 
 func (m *monitor) report(p *index.Progress) {
-	if p.IsFinal() || p.Time().Sub(m.lastReport) >= 5*time.Minute {
-		m.lastReport = p.Time()
+	if m.lastReport.IsZero() {
+		m.lastReport = p.Start()
+	}
+	if p.Time().Sub(m.lastReport).Round(time.Second) >= time.Minute || p.IsFinal() {
 		log.Println(p)
+		m.lastReport = p.Time()
 	}
 }

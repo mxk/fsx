@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,12 +118,16 @@ func TestProgress(t *testing.T) {
 	want := "Indexed 0 files (0 B) in 0s [0 files/sec, 0 B/sec]"
 	require.Equal(t, want, p.String())
 
-	p.fileDone(t0.Add(time.Second), 128)
+	p.sampleFiles++
+	p.sampleBytes.Add(128)
+	p.update(t0.Add(time.Second))
 	want = "Indexed 1 files (128 B) in 1s [1 files/sec, 128 B/sec]"
 	require.Equal(t, want, p.String())
 
-	p.fileDone(t0.Add(2*time.Second), 1024)
-	want = "Indexed 2 files (1.1 KiB) in 2s [1 files/sec, 143 B/sec]"
+	p.sampleFiles++
+	p.sampleBytes.Add(1024)
+	p.update(t0.Add(2 * time.Second))
+	want = fmt.Sprintf("Indexed 2 files (1.1 KiB) in 2s [1 files/sec, %.0f B/sec]", 0.9*128+0.1*1024)
 	require.Equal(t, want, p.String())
 }
 
