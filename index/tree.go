@@ -88,14 +88,12 @@ func (idx *Index) ToTree() *Tree {
 
 // ToIndex converts from a tree to index representation.
 func (t *Tree) ToIndex() Index {
-	groups := make([]Files, 0, len(t.idx))
+	all := make(Files, 0, len(t.idx))
 	for _, g := range t.idx {
-		groups = append(groups, g)
+		all = append(all, g...)
 	}
-	// TODO: Maintain original group order if there are identical paths with
-	// different digests.
-	slices.SortFunc(groups, func(a, b Files) int { return a[0].Path.cmp(b[0].Path) })
-	return Index{t.root, groups}
+	all.Sort()
+	return New(t.root, all)
 }
 
 // Dir returns the specified directory, if it exists.

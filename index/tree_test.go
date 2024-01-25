@@ -1,6 +1,7 @@
 package index
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -119,6 +120,12 @@ func TestToTree(t *testing.T) {
 	mapEqual(t, want.dirs, have.dirs)
 	mapEqual(t, want.idx, have.idx)
 	assert.Equal(t, want, have)
+}
+
+func TestToIndex(t *testing.T) {
+	idx, err := read(strings.NewReader(testIdx))
+	require.NoError(t, err)
+	require.Equal(t, idx, idx.ToTree().ToIndex())
 }
 
 func TestDedup(t *testing.T) {
