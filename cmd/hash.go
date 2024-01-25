@@ -77,11 +77,10 @@ type hashQueue struct {
 func (q *hashQueue) result(r *hashResult) {
 	if r.err != nil {
 		q.err = cli.ExitCode(1)
-	}
-	if !q.diff {
+	} else if !q.diff {
 		if q.want == (index.Digest{}) {
-			q.want = r.Digest()
-		} else if q.want != r.Digest() {
+			q.want = r.f.Digest()
+		} else if q.want != r.f.Digest() {
 			q.diff = true
 		}
 	}
@@ -103,22 +102,22 @@ func (q *hashQueue) result(r *hashResult) {
 }
 
 type hashResult struct {
-	*index.File
 	i    int
 	name string
+	f    *index.File
 	err  error
 }
 
 func hash(h *index.Hasher, names []string, i int) *hashResult {
-	r := &hashResult{i: i, name: filepath.Clean(names[i])}
-	r.File, r.err = h.Read(nil, r.name, false)
-	return r
+	name := filepath.Clean(names[i])
+	f, err := h.Read(nil, name, false)
+	return &hashResult{i, name, f, err}
 }
 
 func (r *hashResult) print() {
 	if r.err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, r.err)
 	} else {
-		fmt.Printf("%X  %s\n", r.Digest(), r.name)
+		fmt.Printf("%X  %s\n", r.f.Digest(), r.name)
 	}
 }
