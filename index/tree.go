@@ -50,32 +50,38 @@ func (idx *Index) ToTree() *Tree {
 	}
 
 	// Sort directories and files, and find atomic directories
-	sortCh := make(chan *Dir, min(runtime.NumCPU(), 8))
+	sort := make(chan *Dir, min(runtime.NumCPU(), 8))
 	var wg sync.WaitGroup
-	wg.Add(cap(sortCh))
-	for n := cap(sortCh); n > 0; n-- {
-		go func(sortCh <-chan *Dir) {
+	wg.Add(cap(sort))
+	for n := cap(sort); n > 0; n-- {
+		go func(sort <-chan *Dir) {
 			defer wg.Done()
-			for d := range sortCh {
+			for d := range sort {
 				slices.SortFunc(d.dirs, func(a, b *Dir) int {
-					return cmp.Compare(a.Base(), b.Base())
+					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
+						return c
+					}
+					panic(fmt.Sprintf("index: duplicate directory name: %s", a))
 				})
 				slices.SortFunc(d.files, func(a, b *File) int {
-					return cmp.Compare(a.Base(), b.Base())
+					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
+						return c
+					}
+					panic(fmt.Sprintf("index: duplicate file name: %s", a))
 				})
 			}
-		}(sortCh)
+		}(sort)
 	}
 	var subtree dirStack
 	for _, d := range t.dirs {
-		sortCh <- d
+		sort <- d
 		if d.atom == nil && isAtomic(d.Base()) {
 			for subtree.from(d); len(subtree) > 0; {
 				subtree.next().atom = d
 			}
 		}
 	}
-	close(sortCh)
+	close(sort)
 	wg.Wait()
 	return t
 }
@@ -255,7 +261,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 				continue
 			}
 			for _, dup := range tree.idx[f.digest] {
-				if !root.Contains(dup.Path) {
+				if !dup.flag.IsGone() && !root.Contains(dup.Path) {
 					dd.safe[f.digest] = struct{}{}
 					continue files
 				}
