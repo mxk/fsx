@@ -110,6 +110,18 @@ func TestScan(t *testing.T) {
 		},
 	}
 	require.Equal(t, wantTree, idx.ToTree())
+
+	// Rescan
+	for _, g := range want.groups {
+		for _, f := range g {
+			if !f.flag.IsGone() {
+				f.flag |= flagSame
+			}
+		}
+	}
+	idx, err = idx.ToTree().Rescan(context.Background(), fsys, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, want, idx)
 }
 
 func TestProgress(t *testing.T) {

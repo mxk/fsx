@@ -39,7 +39,7 @@ func (createCmd) Main(args []string) error {
 
 type monitor struct {
 	walkErr    bool
-	lastReport time.Time
+	nextReport time.Duration
 }
 
 func (m *monitor) err(err error) {
@@ -48,11 +48,9 @@ func (m *monitor) err(err error) {
 }
 
 func (m *monitor) report(p *index.Progress) {
-	if m.lastReport.IsZero() {
-		m.lastReport = p.Start()
-	}
-	if p.Time().Sub(m.lastReport).Round(time.Second) >= time.Minute || p.IsFinal() {
+	const rate = 5 * time.Minute
+	if p.Duration() >= max(time.Minute, m.nextReport) || p.IsFinal() {
 		log.Println(p)
-		m.lastReport = p.Time()
+		m.nextReport = (p.Duration() + rate).Round(rate)
 	}
 }

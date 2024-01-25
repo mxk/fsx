@@ -200,6 +200,8 @@ type Progress struct {
 
 	start time.Time
 	now   time.Time
+	dur   time.Duration
+
 	files uint64
 	bytes uint64
 	fps   float64
@@ -212,27 +214,24 @@ func newProgress(start time.Time) *Progress {
 	return &Progress{start: start, now: start}
 }
 
-// Start returns the start time of the operation.
-func (p *Progress) Start() time.Time { return p.start }
-
-// Time returns the time when the progress was last updated.
-func (p *Progress) Time() time.Time { return p.now }
+// Duration returns the duration of the operation rounded to the nearest second.
+func (p *Progress) Duration() time.Duration { return p.dur }
 
 // IsFinal returns whether this is the final progress report.
 func (p *Progress) IsFinal() bool { return p.final }
 
 func (p *Progress) String() string {
+	files := humanize.Comma(int64(p.files))
 	bytes := humanize.IBytes(p.bytes)
-	dur := p.now.Sub(p.start).Round(time.Second)
 	bps := humanize.IBytes(uint64(math.Round(p.bps)))
-	return fmt.Sprintf("Indexed %d files (%s) in %v [%.0f files/sec, %s/sec]",
-		p.files, bytes, dur, p.fps, bps)
+	return fmt.Sprintf("Indexed %s files (%s) in %v [%.0f files/sec, %s/sec]",
+		files, bytes, p.dur, p.fps, bps)
 }
 
 func (p *Progress) update(now time.Time) {
 	sampleBytes := p.sampleBytes.Swap(0)
 	sec := now.Sub(p.now).Seconds()
-	if sec <= 0 {
+	if sec < 0.5 {
 		p.sampleBytes.Add(sampleBytes)
 		return
 	}
@@ -241,6 +240,7 @@ func (p *Progress) update(now time.Time) {
 		alpha = 1 // First sample
 	}
 	p.now = now
+	p.dur = now.Sub(p.start).Round(time.Second)
 	p.files += p.sampleFiles
 	p.bytes += sampleBytes
 	p.fps = (1-alpha)*p.fps + alpha*(float64(p.sampleFiles)/sec)
