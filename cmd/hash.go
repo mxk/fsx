@@ -26,7 +26,7 @@ type hashCmd struct {
 
 func (cmd *hashCmd) Main(args []string) error {
 	if len(args) == 1 {
-		r := hash(index.NewHasher(), args, 0)
+		r := hash(index.NewHasher(nil), args, 0)
 		if r.print(); r.err != nil {
 			r.err = cli.ExitCode(1)
 		}
@@ -38,7 +38,7 @@ func (cmd *hashCmd) Main(args []string) error {
 	done := make(chan *hashResult, 1)
 	for n := workers.Add(int32(min(len(args), runtime.NumCPU()))); n > 0; n-- {
 		go func() {
-			h := index.NewHasher()
+			h := index.NewHasher(nil)
 			for i := next.Load(); int(i) < len(args); i = next.Load() {
 				if next.CompareAndSwap(i, i+1) {
 					done <- hash(h, args, int(i))

@@ -45,7 +45,7 @@ func (p Path) IsDir() bool {
 }
 
 // Contains returns whether other is under the directory tree p. It returns true
-// if the paths are equal or if p is ".".
+// if the paths are equal (same directory) or if p is ".".
 func (p Path) Contains(other Path) bool {
 	return p.p == "." || (0 < len(p.p) && len(p.p) <= len(other.p) &&
 		other.p[:len(p.p)] == p.p && p.p[len(p.p)-1] == '/')

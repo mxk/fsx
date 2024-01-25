@@ -1,6 +1,7 @@
 package index
 
 import (
+	"context"
 	"encoding/hex"
 	"io/fs"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zeebo/blake3"
 )
 
 func TestHasher(t *testing.T) {
@@ -37,7 +39,7 @@ func TestHasher(t *testing.T) {
 		&File{Path{"~"}, d31744, 31744, t2, flagNone},
 	}
 
-	h := NewHasher()
+	h := NewHasher(nil)
 	var have Files
 	err := fs.WalkDir(fsys, ".", func(name string, e fs.DirEntry, err error) error {
 		if require.NoError(t, err); !e.IsDir() {
@@ -50,6 +52,40 @@ func TestHasher(t *testing.T) {
 	require.NoError(t, err)
 	have.Sort()
 	require.Equal(t, want, have)
+}
+
+func TestHasherMonitor(t *testing.T) {
+	var calls []int
+	h := NewHasher(func(n int) error {
+		if calls = append(calls, n); len(calls) > 2 {
+			return context.Canceled
+		}
+		return nil
+	})
+	n := len(h.b)
+
+	data := make([]byte, 3*n+1)
+	fsys := fstest.MapFS{
+		"a": &fstest.MapFile{Data: data[:n+1]},
+		"b": &fstest.MapFile{Data: data},
+		"c": &fstest.MapFile{},
+	}
+
+	f, err := h.Read(fsys, "a", false)
+	require.NoError(t, err)
+	require.Equal(t, Digest(blake3.Sum256(fsys["a"].Data)), f.digest)
+	require.Equal(t, []int{n, 1}, calls)
+
+	calls = calls[:0]
+	_, err = h.Read(fsys, "b", false)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, []int{n, n, n}, calls)
+
+	calls = calls[:0]
+	f, err = h.Read(fsys, "c", true)
+	require.NoError(t, err)
+	require.Equal(t, Digest(blake3.Sum256([]byte{'c'})), f.digest)
+	require.Equal(t, []int{1}, calls)
 }
 
 func testDigest(t *testing.T, s string) (d Digest) {

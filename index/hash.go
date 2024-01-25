@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"unsafe"
 
 	"github.com/zeebo/blake3"
 )
@@ -25,11 +26,16 @@ func init() {
 // Hasher is a file hasher.
 type Hasher struct {
 	h blake3.Hasher
+	m func(int) error
 	b [1024 * 1024]byte
 }
 
-// NewHasher returns a new file hasher.
-func NewHasher() *Hasher { return &Hasher{h: *newHash()} }
+// NewHasher returns a new file hasher. If monitor is non-nil, it is called
+// after every write with the number of bytes written. Hashing is aborted if
+// monitor returns an error.
+func NewHasher(monitor func(n int) error) *Hasher {
+	return &Hasher{h: *newHash(), m: monitor}
+}
 
 // Read computes the digest of the specified file. If the file is empty and
 // nameFallback is true, it computes the digest of name. If fsys is nil, it is
@@ -54,9 +60,9 @@ func (h *Hasher) Read(fsys fs.FS, name string, nameFallback bool) (*File, error)
 
 	// Compute digest
 	h.h.Reset()
-	n, err := io.CopyBuffer(&h.h, f, h.b[:])
-	f, err2 := nil, f.Close()
-	if err != nil {
+	n, err := io.CopyBuffer(h.writer(), f, h.b[:])
+	err2 := f.Close()
+	if f = nil; err != nil {
 		return nil, fmt.Errorf("index: failed to read file: %s (%w)", name, err)
 	}
 	if err2 != nil {
@@ -67,7 +73,7 @@ func (h *Hasher) Read(fsys fs.FS, name string, nameFallback bool) (*File, error)
 	}
 	if n == 0 && nameFallback {
 		// Zero-length files get a unique hash based on their full name
-		_, _ = h.h.WriteString(name)
+		_, _ = h.writer().Write(unsafe.Slice(unsafe.StringData(name), len(name)))
 	}
 
 	// Verify that file size and modtime have not changed
@@ -80,10 +86,26 @@ func (h *Hasher) Read(fsys fs.FS, name string, nameFallback bool) (*File, error)
 	return file, nil
 }
 
+// writer returns the hash io.Writer interface.
+func (h *Hasher) writer() io.Writer {
+	if h.m == nil {
+		return &h.h
+	}
+	return (*monWriter)(h)
+}
+
 // digest returns the current hash Digest.
 func (h *Hasher) digest() (d Digest) {
 	if b := h.h.Sum(d[:0]); &b[len(b)-1] != &d[len(d)-1] {
 		panic("index: digest buffer reallocated")
 	}
 	return
+}
+
+// monWriter is an io.Writer that calls a monitor function after every write.
+type monWriter Hasher
+
+func (w *monWriter) Write(p []byte) (int, error) {
+	n, _ := w.h.Write(p)
+	return n, w.m(n)
 }

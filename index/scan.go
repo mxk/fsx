@@ -158,7 +158,7 @@ func (w *walker) walk(ctx context.Context, t *Tree) {
 
 func (w *walker) hash(names <-chan string) {
 	defer w.wg.Done()
-	h := NewHasher()
+	h := NewHasher(nil)
 	for name := range names {
 		// TODO: Cancellation
 		if f, err := h.Read(w.fsys, name, true); err != nil {
