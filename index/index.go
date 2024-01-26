@@ -25,7 +25,12 @@ type Index struct {
 }
 
 // New creates a new file index.
-func New(root string, all Files) Index { return Index{root, groupByDigest(all)} }
+func New(root string, all Files) Index {
+	if len(all) == 0 {
+		return Index{root: root}
+	}
+	return Index{root, groupByDigest(all)}
+}
 
 // Load loads index contents from the specified file path.
 func Load(name string) (Index, error) {

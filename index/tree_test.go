@@ -3,6 +3,7 @@ package index
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,6 +139,19 @@ func TestToTree(t *testing.T) {
 	mapEqual(t, want.dirs, have.dirs)
 	mapEqual(t, want.idx, have.idx)
 	assert.Equal(t, want, have)
+}
+
+func TestEmptyTree(t *testing.T) {
+	require.Equal(t, &Tree{root: "/"}, (&Index{root: "/"}).ToTree())
+	require.Equal(t, Index{root: "/"}, (&Tree{root: "/"}).ToIndex())
+
+	d1 := Digest{1}
+	idx := Index{root: "/", groups: []Files{{
+		{Path{"x"}, d1, 1, time.Time{}, flagDup | flagGone},
+	}}}
+	tr := &Tree{root: "/", idx: map[Digest]Files{d1: idx.groups[0]}}
+	require.Equal(t, tr, idx.ToTree())
+	require.Equal(t, idx, tr.ToIndex())
 }
 
 func TestToIndex(t *testing.T) {
