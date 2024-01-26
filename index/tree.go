@@ -268,6 +268,7 @@ func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
 	files:
 		for _, f := range dd.subtree.next().files {
 			if f.flag&flagPersist != 0 {
+				// Tree shouldn't contain files marked gone, but just in case
 				if f.flag.IsGone() {
 					continue
 				}
@@ -332,7 +333,11 @@ func (dd *dedup) dedup() *Dup {
 	for g := range dd.safe {
 		for _, f := range dd.tree.idx[g] {
 			if f.isSafeOutsideOf(dd.root) {
-				dd.uniqueDirs.add(f.Dir())
+				d := dd.tree.dirs[f.Dir()]
+				if d.atom != nil {
+					d = d.atom
+				}
+				dd.uniqueDirs.add(d.Path)
 			}
 		}
 		dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
@@ -352,9 +357,6 @@ func (dd *dedup) dedup() *Dup {
 		bestScore, bestDir := -math.MaxFloat64, Path{}
 		for p, n := range dd.safeCount {
 			alt := dd.tree.dirs[p]
-			if alt.atom != nil {
-				alt = alt.atom // TODO: Should n be changed?
-			}
 			score := float64(n)*(float64(1+n)/float64(1+alt.uniqueFiles)) +
 				2.0/float64(1+dd.root.Dist(p))
 			if p.Contains(dd.root.Path) {
