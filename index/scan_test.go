@@ -93,12 +93,15 @@ func TestScan(t *testing.T) {
 	X := &Dir{
 		Path:        Path{"X/"},
 		files:       Files{idx.groups[1][0]},
+		totalFiles:  1,
 		uniqueFiles: 1,
 	}
 	root := &Dir{
 		Path:        Root,
 		dirs:        Dirs{X},
 		files:       Files{idx.groups[2][0], idx.groups[0][1]},
+		totalDirs:   1,
+		totalFiles:  3,
 		uniqueFiles: 3,
 	}
 	wantTree := &Tree{

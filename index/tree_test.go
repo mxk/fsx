@@ -30,22 +30,29 @@ func TestToTree(t *testing.T) {
 	Z := &Dir{
 		Path:        Path{"C/.git/X/.git/Z/"},
 		files:       Files{y1},
+		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
 	GIT2 := &Dir{
 		Path:        Path{"C/.git/X/.git/"},
 		dirs:        Dirs{Z},
+		totalDirs:   1,
+		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
 	X := &Dir{
 		Path:        Path{"C/.git/X/"},
 		dirs:        Dirs{GIT2},
 		files:       Files{x1},
+		totalDirs:   2,
+		totalFiles:  2,
 		uniqueFiles: 2, // x1, y1
 	}
 	GIT1 := &Dir{
 		Path:        Path{"C/.git/"},
 		dirs:        Dirs{X},
+		totalDirs:   3,
+		totalFiles:  2,
 		uniqueFiles: 2, // x1, y1
 	}
 	GIT1.atom = GIT1
@@ -56,39 +63,50 @@ func TestToTree(t *testing.T) {
 	F := &Dir{
 		Path:        Path{"C/F/"},
 		files:       Files{c2},
+		totalFiles:  1,
 		uniqueFiles: 1, // c2
 	}
 	E := &Dir{
 		Path:        Path{"C/D/E/"},
 		files:       Files{b2},
+		totalFiles:  1,
 		uniqueFiles: 1, // b2
 	}
 	D := &Dir{
 		Path:        Path{"C/D/"},
 		dirs:        Dirs{E},
+		totalDirs:   1,
+		totalFiles:  1,
 		uniqueFiles: 1, // b2,
 	}
 	C := &Dir{
 		Path:        Path{"C/"},
 		dirs:        Dirs{GIT1, D, F},
 		files:       Files{c1},
+		totalDirs:   7,
+		totalFiles:  5,
 		uniqueFiles: 4, // b2, c[12], x1, y1
 	}
 	B := &Dir{
 		Path:        Path{"A/B/"},
 		files:       Files{a3},
+		totalFiles:  1,
 		uniqueFiles: 1, // a3
 	}
 	A := &Dir{
 		Path:        Path{"A/"},
 		dirs:        Dirs{B},
 		files:       Files{a2, b1},
+		totalDirs:   1,
+		totalFiles:  3,
 		uniqueFiles: 2, // a[23], b1
 	}
 	root := &Dir{
 		Path:        Root,
 		dirs:        Dirs{A, C},
 		files:       Files{a1},
+		totalDirs:   10,
+		totalFiles:  9,
 		uniqueFiles: 5,
 	}
 

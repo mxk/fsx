@@ -81,7 +81,21 @@ type Dir struct {
 	dirs        Dirs  // Subdirectories
 	files       Files // Files in this directory
 	atom        *Dir  // Atomic container directory, such as .git
+	totalDirs   int   // Total number of direct and indirect directories
+	totalFiles  int   // Total number of direct and indirect files
 	uniqueFiles int   // Total number of direct and indirect unique files
+}
+
+// updateCounts updates total directory and file counts. It assumes that no
+// files in the tree are marked as gone.
+func (d *Dir) updateCounts() {
+	d.totalDirs = len(d.dirs)
+	d.totalFiles = len(d.files)
+	for _, c := range d.dirs {
+		c.updateCounts()
+		d.totalDirs += c.totalDirs
+		d.totalFiles += c.totalFiles
+	}
 }
 
 // Dirs is an ordered list of directories.

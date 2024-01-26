@@ -83,6 +83,11 @@ func (idx *Index) ToTree() *Tree {
 	}
 	close(sort)
 	wg.Wait()
+
+	// Update directory and file counts
+	if root := t.dirs[Root]; root != nil {
+		root.updateCounts()
+	}
 	return t
 }
 
