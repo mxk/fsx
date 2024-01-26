@@ -35,8 +35,11 @@ func (a Flag) IsGone() bool { return a&flagGone != 0 }
 // MayRemove returns whether the file may be removed.
 func (a Flag) MayRemove() bool { return a&flagKeep == flagDup || a&flagKeep == flagJunk }
 
-// persist returns whether the file should be written to the index.
-func (a Flag) persist() bool { return a&flagGone == 0 || a&flagKeep != 0 }
+// IsSafe returns whether the file exists and is not marked for removal.
+func (a Flag) IsSafe() bool { return a&flagPersist == 0 || a&flagPersist == flagKeep }
+
+// write returns whether the file should be written to the index.
+func (a Flag) write() bool { return a&flagGone == 0 || a&flagKeep != 0 }
 
 // String returns the string representation of file flags.
 func (a Flag) String() string {

@@ -132,28 +132,31 @@ func TestDedup(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
 	file := func(d Digest, p string) *File { return &File{digest: d, size: 1, Path: Path{p}} }
 
-	a1 := file(d1, "A/a1")
-	b1 := file(d2, "A/b1")
-	c1 := file(d3, "A/c1")
-	a2 := file(d1, "B/a2")
-	b2 := file(d2, "B/b2")
-	c2 := file(d3, "B/c2")
+	a0, a1 := file(d1, "A/a0"), file(d1, "B/a1")
+	b0, b1 := file(d2, "A/b0"), file(d2, "B/b1")
+	c0, c1 := file(d3, "A/c0"), file(d3, "B/c1")
+	c1.flag |= flagGone
 
-	idx := Index{
-		root:   "/",
-		groups: []Files{{a1, a2}, {b1, b2}, {c1, c2}},
-	}
-
-	tree := idx.ToTree()
+	idx := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
+	tr := idx.ToTree()
 	want := []*Dup{{
-		Dir: tree.dirs[Path{"A/"}],
-		Alt: Dirs{tree.dirs[Path{"B/"}]},
+		Dir:  tr.dirs[Path{"A/"}],
+		Alt:  Dirs{tr.dirs[Path{"B/"}]},
+		Lost: Files{c0},
 	}, {
-		Dir: tree.dirs[Path{"B/"}],
-		Alt: Dirs{tree.dirs[Path{"A/"}]},
+		Dir: tr.dirs[Path{"B/"}],
+		Alt: Dirs{tr.dirs[Path{"A/"}]},
 	}}
+	require.Equal(t, want, tr.Dups(Root, -1, 1))
 
-	assert.Equal(t, want, tree.Dups(Root, -1, 0))
+	a0.flag |= flagKeep
+	require.Equal(t, want[1:], tr.Dups(Root, -1, 1))
+
+	a0.flag = flagNone
+	c0.flag |= flagKeep | flagGone
+	a1.flag |= flagKeep
+	want[0].Lost = nil
+	require.Equal(t, want[:1], tr.Dups(Root, -1, 1))
 }
 
 func TestDirStack(t *testing.T) {

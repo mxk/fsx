@@ -189,7 +189,7 @@ func (idx *Index) write(dst io.Writer) error {
 		empty := true
 		align, lineWidth := minAlign, lineWidth[:0]
 		for _, f := range g {
-			if f.flag.persist() {
+			if f.flag.write() {
 				empty = false
 				n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
 				align, lineWidth = max(align, n), append(lineWidth, n)
@@ -206,7 +206,7 @@ func (idx *Index) write(dst io.Writer) error {
 
 		// Flags, paths, and modification times
 		for i, f := range g {
-			if !f.flag.persist() {
+			if !f.flag.write() {
 				continue
 			}
 			_, _ = w.WriteString(f.flag.String())

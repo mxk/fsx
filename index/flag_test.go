@@ -31,16 +31,48 @@ func TestFlag(t *testing.T) {
 	_, ok = parseFlag("XX")
 	assert.False(t, ok)
 
-	assert.True(t, flagDup.IsDup())
-	assert.False(t, flagDup.IsJunk())
-	assert.False(t, flagDup.Keep())
-	assert.False(t, flagDup.IsGone())
-	assert.True(t, flagDup.MayRemove())
+	var f Flag
+	assert.False(t, f.IsDup())
+	assert.False(t, f.IsJunk())
+	assert.False(t, f.Keep())
+	assert.False(t, f.IsGone())
+	assert.False(t, f.MayRemove())
+	assert.True(t, f.IsSafe())
+	assert.True(t, f.write())
 
-	a := flagKeep | flagGone
-	assert.False(t, a.IsDup())
-	assert.False(t, a.IsJunk())
-	assert.True(t, a.Keep())
-	assert.True(t, a.IsGone())
-	assert.False(t, a.MayRemove())
+	f = flagDup
+	assert.True(t, f.IsDup())
+	assert.False(t, f.IsJunk())
+	assert.False(t, f.Keep())
+	assert.False(t, f.IsGone())
+	assert.True(t, f.MayRemove())
+	assert.False(t, f.IsSafe())
+	assert.True(t, f.write())
+
+	f = flagKeep
+	assert.False(t, f.IsDup())
+	assert.False(t, f.IsJunk())
+	assert.True(t, f.Keep())
+	assert.False(t, f.IsGone())
+	assert.False(t, f.MayRemove())
+	assert.True(t, f.IsSafe())
+	assert.True(t, f.write())
+
+	f = flagGone
+	assert.False(t, f.IsDup())
+	assert.False(t, f.IsJunk())
+	assert.False(t, f.Keep())
+	assert.True(t, f.IsGone())
+	assert.False(t, f.MayRemove())
+	assert.False(t, f.IsSafe())
+	assert.False(t, f.write())
+
+	f = flagKeep | flagGone
+	assert.False(t, f.IsDup())
+	assert.False(t, f.IsJunk())
+	assert.True(t, f.Keep())
+	assert.True(t, f.IsGone())
+	assert.False(t, f.MayRemove())
+	assert.False(t, f.IsSafe())
+	assert.True(t, f.write())
 }

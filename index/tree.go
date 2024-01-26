@@ -103,8 +103,8 @@ func (t *Tree) Dir(name string) *Dir {
 
 // Dups returns directories under dir that contain duplicate data. If maxDups is
 // > 0, at most that many directories are returned. maxLost is the maximum
-// number of files that can be lost for a directory to still be considered a
-// duplicate.
+// number of unique files that can be lost for a directory to still be
+// considered a duplicate.
 func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	root, ok := t.dirs[dir]
 	if !ok || len(root.dirs) == 0 {
@@ -254,12 +254,20 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	for dd.subtree.from(root); len(dd.subtree) > 0; {
 	files:
 		for _, f := range dd.subtree.next().files {
+			if f.flag&flagPersist != 0 {
+				if f.flag.IsGone() {
+					continue
+				}
+				if f.flag.Keep() {
+					return nil
+				}
+			}
 			if f.canIgnore() {
 				dd.ignored = append(dd.ignored, f)
 				continue
 			}
 			for _, dup := range tree.idx[f.digest] {
-				if !dup.flag.IsGone() && !root.Contains(dup.Path) {
+				if dup.flag.IsSafe() && !root.Contains(dup.Path) {
 					dd.safe[f.digest] = struct{}{}
 					continue files
 				}
@@ -270,7 +278,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 		}
 	}
 
-	// Require more files to be saved than lost
+	// Require more unique files to be saved than lost
 	if len(dd.safe) <= len(dd.lost)*len(dd.lost) {
 		return nil
 	}
@@ -284,7 +292,11 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	if len(dd.lost) > 0 {
 		dup.Lost = make(Files, 0, len(dd.lost))
 		for g := range dd.lost {
-			dup.Lost = append(dup.Lost, tree.idx[g]...)
+			for _, f := range tree.idx[g] {
+				if !f.flag.IsGone() && root.Contains(f.Path) {
+					dup.Lost = append(dup.Lost, f)
+				}
+			}
 		}
 		dup.Lost.Sort()
 	}
