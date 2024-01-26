@@ -47,6 +47,11 @@ func (f *File) canIgnore() bool {
 		strings.EqualFold(name, "desktop.ini")
 }
 
+// isSafeOutsideOf returns whether f is a safe file outside of d.
+func (f *File) isSafeOutsideOf(d *Dir) bool {
+	return f.flag.IsSafe() && !d.Path.Contains(f.Path)
+}
+
 // cmp returns -1 if f < other, 0 if f == other, and +1 if f > other.
 func (f *File) cmp(other *File) int {
 	if c := f.Path.cmp(other.Path); c != 0 {

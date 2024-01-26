@@ -106,8 +106,8 @@ func (t *Tree) Dir(name string) *Dir {
 // number of unique files that can be lost for a directory to still be
 // considered a duplicate.
 func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
-	root, ok := t.dirs[dir]
-	if !ok || len(root.dirs) == 0 {
+	root := t.dirs[dir]
+	if root == nil || len(root.dirs) == 0 {
 		return nil
 	}
 	var q dirStack
@@ -125,8 +125,8 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 			defer wg.Done()
 			var dd dedup
 			for root := range next {
-				if d := dd.dedup(t, root, maxLost); d != nil {
-					dup <- d
+				if dd.isDup(t, root, maxLost) {
+					dup <- dd.dedup()
 				} else {
 					dirs <- root.dirs
 				}
@@ -188,18 +188,18 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 	}
 }
 
-// addFile adds file f to the tree, creating all required parent directories.
+// addFile adds file f to the tree, creating any required parent directories.
 func (t *Tree) addFile(f *File) {
 	name := f.Dir()
-	if p, ok := t.dirs[name]; ok {
-		p.files = append(p.files, f)
+	if d := t.dirs[name]; d != nil {
+		d.files = append(d.files, f)
 		return
 	}
 	d := &Dir{Path: name, files: Files{f}}
 	t.dirs[name] = d
 	for name != Root {
 		name = d.Dir()
-		if p, ok := t.dirs[name]; ok {
+		if p := t.dirs[name]; p != nil {
 			p.dirs = append(p.dirs, d)
 			break
 		}
@@ -226,27 +226,30 @@ func (t *Tree) file(p Path) *File {
 
 // dedup locates duplicate directories in the Tree.
 type dedup struct {
-	subtree    dirStack
-	ignored    Files
-	safe       map[Digest]struct{}
-	lost       map[Digest]struct{}
-	safeCount  map[Path]int
+	tree *Tree
+	root *Dir
+
+	subtree dirStack
+	ignored Files
+	safe    map[Digest]struct{}
+	lost    map[Digest]struct{}
+
 	uniqueDirs uniqueDirs
+	safeCount  map[Path]int
 }
 
-// dedup returns a non-nil Dup if root can be deduplicated.
-func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
+// isDup returns whether root can be deduplicated.
+func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
+	dd.tree, dd.root = nil, nil
 	if root.atom != nil && root.atom != root {
-		return nil
+		return false
 	}
 	if dd.safe == nil {
 		dd.safe = make(map[Digest]struct{})
 		dd.lost = make(map[Digest]struct{})
-		dd.safeCount = make(map[Path]int)
 	} else {
 		clear(dd.safe)
 		clear(dd.lost)
-		clear(dd.safeCount)
 	}
 
 	// Categorize files as ignored, safe, or lost
@@ -259,7 +262,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 					continue
 				}
 				if f.flag.Keep() {
-					return nil
+					return false
 				}
 			}
 			if f.canIgnore() {
@@ -267,24 +270,32 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 				continue
 			}
 			for _, dup := range tree.idx[f.digest] {
-				if dup.flag.IsSafe() && !root.Contains(dup.Path) {
+				if dup.isSafeOutsideOf(root) {
 					dd.safe[f.digest] = struct{}{}
 					continue files
 				}
 			}
 			if dd.lost[f.digest] = struct{}{}; len(dd.lost) > maxLost {
-				return nil
+				return false
 			}
 		}
 	}
 
 	// Require more unique files to be saved than lost
-	if len(dd.safe) <= len(dd.lost)*len(dd.lost) {
+	if len(dd.safe) > len(dd.lost)*len(dd.lost) {
+		dd.tree, dd.root = tree, root
+	}
+	return dd.tree != nil
+}
+
+// dedup returns a non-nil Dup if isDup returned true.
+func (dd *dedup) dedup() *Dup {
+	if dd.tree == nil {
 		return nil
 	}
 
 	// Record ignored and lost files
-	dup := &Dup{Dir: root}
+	dup := &Dup{Dir: dd.root}
 	if len(dd.ignored) > 0 {
 		dup.Ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
 		dup.Ignored.Sort()
@@ -292,8 +303,8 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	if len(dd.lost) > 0 {
 		dup.Lost = make(Files, 0, len(dd.lost))
 		for g := range dd.lost {
-			for _, f := range tree.idx[g] {
-				if !f.flag.IsGone() && root.Contains(f.Path) {
+			for _, f := range dd.tree.idx[g] {
+				if !f.flag.IsGone() && dd.root.Contains(f.Path) {
 					dup.Lost = append(dup.Lost, f)
 				}
 			}
@@ -302,9 +313,15 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	}
 
 	// Create per-directory safe file counts
+	dd.uniqueDirs = dd.uniqueDirs[:0]
+	if dd.safeCount == nil {
+		dd.safeCount = make(map[Path]int)
+	} else {
+		clear(dd.safeCount)
+	}
 	for g := range dd.safe {
-		for _, f := range tree.idx[g] {
-			if !root.Contains(f.Path) {
+		for _, f := range dd.tree.idx[g] {
+			if f.isSafeOutsideOf(dd.root) {
 				dd.uniqueDirs.add(f.Dir())
 			}
 		}
@@ -324,13 +341,13 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 	for len(dd.safe) > 0 {
 		bestScore, bestDir := -math.MaxFloat64, Path{}
 		for p, n := range dd.safeCount {
-			alt := tree.dirs[p]
+			alt := dd.tree.dirs[p]
 			if alt.atom != nil {
 				alt = alt.atom // TODO: Should n be changed?
 			}
 			score := float64(n)*(float64(1+n)/float64(1+alt.uniqueFiles)) +
-				2.0/float64(1+root.Dist(p))
-			if p.Contains(root.Path) {
+				2.0/float64(1+dd.root.Dist(p))
+			if p.Contains(dd.root.Path) {
 				score -= float64(len(dd.safe))
 			}
 			if bestScore < score || (bestScore == score && alt.Path.cmp(bestDir) < 0) {
@@ -343,8 +360,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 
 		// Remove bestDir contents from safe and safeCount
 		for g := range dd.safe {
-			// TODO: Iterate over bestDir files instead?
-			group := tree.idx[g]
+			group := dd.tree.idx[g]
 			for _, f := range group {
 				if bestDir.Contains(f.Path) {
 					goto match
@@ -354,7 +370,7 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 		match:
 			delete(dd.safe, g)
 			for _, f := range group {
-				if !root.Contains(f.Path) {
+				if !dd.root.Contains(f.Path) {
 					dd.uniqueDirs.add(f.Dir())
 				}
 			}
@@ -366,8 +382,9 @@ func (dd *dedup) dedup(tree *Tree, root *Dir, maxLost int) *Dup {
 				}
 			})
 		}
-		dup.Alt = append(dup.Alt, tree.dirs[bestDir])
+		dup.Alt = append(dup.Alt, dd.tree.dirs[bestDir])
 	}
+	dd.tree, dd.root = nil, nil
 	return dup
 }
 
