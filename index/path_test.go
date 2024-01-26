@@ -60,12 +60,35 @@ func TestPathDirBase(t *testing.T) {
 	assert.Panics(t, func() { Path{"/a"}.Dir() })
 }
 
+func TestPathCommonRoot(t *testing.T) {
+	tests := []struct {
+		a, b, root string
+	}{
+		{".", ".", "."},
+		{"a/", ".", "."},
+		{"a/", "a/", "a/"},
+		{"a/b", "a/", "a/"},
+		{"a/b", "a/c", "a/"},
+		{"a/b/", "a/", "a/"},
+		{"a/", "b/", "."},
+		{"a/b/", "a/c/", "a/"},
+		{"a/b/", "b/c/", "."},
+		{"a/b/c/", "a/b/d", "a/b/"},
+		{"a/b/c/", "a/b/d/", "a/b/"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, Path{tc.root}, Path{tc.a}.CommonRoot(Path{tc.b}), "%q", tc)
+		assert.Equal(t, Path{tc.root}, Path{tc.b}.CommonRoot(Path{tc.a}), "%q", tc)
+	}
+}
+
 func TestPathDist(t *testing.T) {
 	tests := []struct {
 		a, b string
 		dist int
 	}{
 		{".", ".", 0},
+		{"a", ".", 0},
 		{"a/", ".", 1},
 		{"a/", "a/", 0},
 		{"a/b", "a/", 0},

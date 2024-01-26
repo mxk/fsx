@@ -66,18 +66,27 @@ func (p Path) Dir() Path {
 // Base returns the last element of p.
 func (p Path) Base() string { return path.Base(p.p) }
 
+// CommonRoot returns the path that is a parent of both p and other.
+func (p Path) CommonRoot(other Path) Path {
+	a, b := p.p, other.p
+	for {
+		i := strings.IndexByte(a, '/')
+		if i < 0 || i != strings.IndexByte(b, '/') || a[:i] != b[:i] {
+			if s := p.p[:len(p.p)-len(a)]; s != "" {
+				return Path{s}
+			}
+			return Root
+		}
+		a, b = a[i+1:], b[i+1:]
+	}
+}
+
 // Dist returns the distance between two paths in terms of directories traversed
 // to go from one to the other.
 func (p Path) Dist(other Path) int {
-	// Strip common prefix
-	for {
-		i, j := strings.IndexByte(p.p, '/'), strings.IndexByte(other.p, '/')
-		if i != j || i < 0 || p.p[:i] != other.p[:i] {
-			break
-		}
-		p.p, other.p = p.p[i+1:], other.p[i+1:]
+	if r := p.CommonRoot(other); r != Root {
+		p.p, other.p = p.p[len(r.p):], other.p[len(r.p):]
 	}
-	// Count directories
 	return strings.Count(p.p, "/") + strings.Count(other.p, "/")
 }
 
