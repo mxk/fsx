@@ -28,7 +28,7 @@ func TestScan(t *testing.T) {
 	}
 	idx, err := Scan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
-	want := Index{groups: []Files{
+	want := &Index{groups: []Files{
 		{
 			{Path{"X/a"}, d1, 1, t1, flagNone},
 			{Path{"Y/c"}, d1, 1, t2, flagNone},
@@ -53,7 +53,7 @@ func TestScan(t *testing.T) {
 	tr.file(Path{"d"}).flag = flagDup
 	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
-	want = Index{groups: []Files{
+	want = &Index{groups: []Files{
 		{
 			{Path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
 			{Path{"e"}, d1, 1, t2, flagNone},
@@ -75,7 +75,7 @@ func TestScan(t *testing.T) {
 	tr.file(Path{"e"}).flag |= flagDup | flagGone
 	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
-	want = Index{groups: []Files{
+	want = &Index{groups: []Files{
 		{
 			{Path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
 			{Path{"e"}, d1, 1, t2, flagDup | flagSame},

@@ -19,14 +19,14 @@ import (
 // Scan creates an index of fsys. If errFn is non-nil, it is called for any
 // file-specific errors. If progFn is non-nil, it is called at regular intervals
 // to report progress. A non-nil error is returned if ctx is canceled.
-func Scan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+func Scan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (*Index, error) {
 	return (*Tree)(nil).Rescan(ctx, fsys, errFn, progFn)
 }
 
 // Rescan updates the index of fsys, skipping the hashing of any files that have
 // identical names, sizes, and modification times. See Scan for more info. Tree
 // t should not be accessed after this operation.
-func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (Index, error) {
+func (t *Tree) Rescan(ctx context.Context, fsys fs.FS, errFn func(error), progFn func(*Progress)) (*Index, error) {
 	// Clear non-persistent flags
 	if t != nil {
 		for _, g := range t.idx {
@@ -88,7 +88,7 @@ recv:
 		progFn(prog)
 	}
 	if cp.canceled() {
-		return Index{}, ctx.Err()
+		return nil, ctx.Err()
 	}
 
 	// all describes current contents of fsys. Files marked flagSame are shared

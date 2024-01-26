@@ -28,7 +28,7 @@ func TestIndexReadWrite(t *testing.T) {
 	t0 := time.Date(2009, 11, 10, 23, 00, 00, 0, time.UTC)
 	t1 := time.Date(2009, 11, 11, 23, 00, 01, 0, time.UTC)
 
-	want := Index{
+	want := &Index{
 		root: "/",
 		groups: []Files{{
 			{Path{"d1/a"}, d1, 1, t0, flagKeep},

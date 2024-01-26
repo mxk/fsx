@@ -97,7 +97,7 @@ func (idx *Index) ToTree() *Tree {
 }
 
 // ToIndex converts from a tree to index representation.
-func (t *Tree) ToIndex() Index {
+func (t *Tree) ToIndex() *Index {
 	all := make(Files, 0, len(t.idx))
 	for _, g := range t.idx {
 		all = append(all, g...)

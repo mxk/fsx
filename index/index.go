@@ -25,18 +25,18 @@ type Index struct {
 }
 
 // New creates a new file index.
-func New(root string, all Files) Index {
+func New(root string, all Files) *Index {
 	if len(all) == 0 {
-		return Index{root: root}
+		return &Index{root: root}
 	}
-	return Index{root, groupByDigest(all)}
+	return &Index{root, groupByDigest(all)}
 }
 
 // Load loads index contents from the specified file path.
-func Load(name string) (Index, error) {
+func Load(name string) (*Index, error) {
 	f, err := os.Open(name)
 	if err != nil {
-		return Index{}, err
+		return nil, err
 	}
 	defer func() {
 		if f != nil {
@@ -52,21 +52,21 @@ func Load(name string) (Index, error) {
 }
 
 // Read reads index contents from src.
-func Read(src io.Reader) (Index, error) {
+func Read(src io.Reader) (*Index, error) {
 	r, err := zstd.NewReader(src)
 	if err != nil {
-		return Index{}, err
+		return nil, err
 	}
 	defer r.Close()
 	return read(r)
 }
 
 // read reads uncompressed index contents from src.
-func read(src io.Reader) (Index, error) {
+func read(src io.Reader) (*Index, error) {
 	s := bufio.NewScanner(src)
 	line, root, err := readHeader(s)
 	if err != nil {
-		return Index{}, err
+		return nil, err
 	}
 	var g Files
 	groups := make([]Files, 0, 512)
@@ -76,11 +76,11 @@ func read(src io.Reader) (Index, error) {
 			// Flags
 			flagb, ln, ok := cutByte(ln, '\t')
 			if !ok {
-				return Index{}, fmt.Errorf("index: invalid entry on line %d", line)
+				return nil, fmt.Errorf("index: invalid entry on line %d", line)
 			}
 			flag, ok := parseFlag(flagb)
 			if !ok {
-				return Index{}, fmt.Errorf("index: invalid flag on line %d (%s)", line, flagb)
+				return nil, fmt.Errorf("index: invalid flag on line %d (%s)", line, flagb)
 			}
 
 			// Path and modification time
@@ -88,10 +88,10 @@ func read(src io.Reader) (Index, error) {
 			f := &File{Path: filePath(string(p)), flag: flag}
 			if len(ln) > 0 {
 				if err := f.modTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
-					return Index{}, fmt.Errorf("index: invalid modification time on line %d", line)
+					return nil, fmt.Errorf("index: invalid modification time on line %d", line)
 				}
 			} else if len(g) == 0 {
-				return Index{}, fmt.Errorf("index: missing modification time on line %d", line)
+				return nil, fmt.Errorf("index: missing modification time on line %d", line)
 			} else {
 				f.modTime = g[len(g)-1].modTime
 			}
@@ -103,20 +103,20 @@ func read(src io.Reader) (Index, error) {
 			continue
 		}
 		if len(g) == 0 {
-			return Index{}, fmt.Errorf("index: missing file group before line %d", line)
+			return nil, fmt.Errorf("index: missing file group before line %d", line)
 		}
 
 		// Digest
 		digest, ln, ok := cutByte(ln, '\t')
 		n, err := hex.Decode(g[0].digest[:], digest)
 		if !ok || n != len(Digest{}) || err != nil {
-			return Index{}, fmt.Errorf("index: invalid digest on line %d", line)
+			return nil, fmt.Errorf("index: invalid digest on line %d", line)
 		}
 
 		// Size
 		v, err := strconv.ParseUint(unsafeString(ln), 10, 63)
 		if g[0].size = int64(v); err != nil {
-			return Index{}, fmt.Errorf("index: invalid size on line %d", line)
+			return nil, fmt.Errorf("index: invalid size on line %d", line)
 		}
 
 		// Copy digest and size
@@ -126,12 +126,12 @@ func read(src io.Reader) (Index, error) {
 		groups, g = append(groups, g[:len(g):len(g)]), g[len(g):]
 	}
 	if s.Err() != nil {
-		return Index{}, fmt.Errorf("index: read error on line %d (%w)", line, s.Err())
+		return nil, fmt.Errorf("index: read error on line %d (%w)", line, s.Err())
 	}
 	if len(g) != 0 {
-		return Index{}, fmt.Errorf("index: incomplete final group")
+		return nil, fmt.Errorf("index: incomplete final group")
 	}
-	return Index{root, groups}, nil
+	return &Index{root, groups}, nil
 }
 
 const v1 = "fsx index v1"
