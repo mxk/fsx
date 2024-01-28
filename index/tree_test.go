@@ -160,7 +160,7 @@ func TestToIndex(t *testing.T) {
 	require.Equal(t, idx, idx.ToTree().ToIndex())
 }
 
-func TestDedup(t *testing.T) {
+func TestDups(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
 	file := func(d Digest, p string) *File { return &File{digest: d, size: 1, Path: Path{p}} }
 
