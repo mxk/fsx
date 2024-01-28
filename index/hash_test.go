@@ -27,10 +27,10 @@ func TestHasher(t *testing.T) {
 	t1 := time.Now()
 	t2 := t1.Add(-time.Hour)
 	fsys := fstest.MapFS{
-		"a/b":       &fstest.MapFile{Data: []byte(testVec[:1]), ModTime: t1},
-		testVec[:2]: &fstest.MapFile{ModTime: t1},
-		"012":       &fstest.MapFile{Data: []byte(testVec), ModTime: t2},
-		"~":         &fstest.MapFile{Data: v31744, ModTime: t2},
+		"a/b":       {Data: []byte(testVec[:1]), ModTime: t1},
+		testVec[:2]: {ModTime: t1},
+		"012":       {Data: []byte(testVec), ModTime: t2},
+		"~":         {Data: v31744, ModTime: t2},
 	}
 	want := Files{
 		&File{Path{"a/b"}, d1, 1, t1, flagNone},
@@ -66,9 +66,9 @@ func TestHasherMonitor(t *testing.T) {
 
 	data := make([]byte, 3*n+1)
 	fsys := fstest.MapFS{
-		"a": &fstest.MapFile{Data: data[:n+1]},
-		"b": &fstest.MapFile{Data: data},
-		"c": &fstest.MapFile{},
+		"a": {Data: data[:n+1]},
+		"b": {Data: data},
+		"c": {},
 	}
 
 	f, err := h.Read(fsys, "a", false)

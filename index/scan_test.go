@@ -21,10 +21,10 @@ func TestScan(t *testing.T) {
 	t1 := time.Now()
 	t2 := t1.Add(-time.Hour)
 	fsys := fstest.MapFS{
-		"X/a": &fstest.MapFile{Data: b1, ModTime: t1},
-		"X/b": &fstest.MapFile{Data: b2, ModTime: t2},
-		"Y/c": &fstest.MapFile{Data: b1, ModTime: t2},
-		"d":   &fstest.MapFile{Data: b3, ModTime: t1},
+		"X/a": {Data: b1, ModTime: t1},
+		"X/b": {Data: b2, ModTime: t2},
+		"Y/c": {Data: b1, ModTime: t2},
+		"d":   {Data: b3, ModTime: t1},
 	}
 	idx, err := Scan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
