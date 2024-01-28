@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFilePath(t *testing.T) {
@@ -131,6 +132,8 @@ func TestPathCmp(t *testing.T) {
 		assert.Equal(t, 1, Path{tc.b}.cmp(Path{tc.a}), "%q", tc)
 	}
 	panics := []struct{ a, b string }{
+		{"", "."},
+		{"", "a"},
 		{"a/", "a"},
 		{"a/a", "a"},
 		{"a/b/c", "a/b"},
@@ -211,7 +214,17 @@ func TestSteps(t *testing.T) {
 }
 
 func TestUniqueDirs(t *testing.T) {
+	var have []Path
+	fn := func(p Path) { have = append(have, p) }
+
 	var u uniqueDirs
+	u.forEach(func(Path) { panic("fail") })
+
+	u.add(dirPath("A/"))
+	u.forEach(fn)
+	require.Equal(t, []Path{Root, {"A/"}}, have)
+	require.Empty(t, u)
+
 	u.add(dirPath("A/"))
 	u.add(dirPath("X/Y/Z/"))
 	u.add(dirPath("A/B/C/D/"))
@@ -221,6 +234,7 @@ func TestUniqueDirs(t *testing.T) {
 	u.add(dirPath("A/B/"))
 	u.add(dirPath("A/B/E/"))
 	u.add(dirPath("A/B/C/D/"))
+
 	want := []Path{
 		Root,
 		{"A/"},
@@ -233,9 +247,8 @@ func TestUniqueDirs(t *testing.T) {
 		{"X/Z/"},
 		{"A/B/E/"},
 	}
-	var have []Path
-	u.forEach(func(p Path) { have = append(have, p) })
-	assert.Equal(t, want, have)
-	assert.Empty(t, u)
-	u.forEach(func(p Path) { panic("fail") })
+	have = have[:0]
+	u.forEach(fn)
+	require.Equal(t, want, have)
+	require.Empty(t, u)
 }

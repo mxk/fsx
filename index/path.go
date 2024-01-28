@@ -91,7 +91,8 @@ func (p Path) Dist(other Path) int {
 }
 
 // cmp returns -1 if p < other, 0 if p == other, and +1 if p > other.
-// Directories are considered less than files.
+// Directories are considered less than files. It panics if either Path is empty
+// or if the same name refers to both a file and a directory.
 func (p Path) cmp(other Path) int {
 	lessIf := func(b bool) int {
 		if b {
@@ -103,6 +104,9 @@ func (p Path) cmp(other Path) int {
 	if a == "." || b == "." {
 		if a == b {
 			return 0
+		}
+		if a == "" || b == "" {
+			panic("index: empty path")
 		}
 		return lessIf(a == ".") // Root is less than all other paths
 	}
@@ -139,6 +143,9 @@ func (p Path) cmp(other Path) int {
 	bSep := strings.IndexByte(b[len(a):], '/')
 	if bSep == 0 {
 		panic(fmt.Sprintf("index: directory without separator suffix: %s", a))
+	}
+	if a == "" {
+		panic("index: empty path")
 	}
 	// If a ends with '/', then it's a parent of b. If b does not have any more
 	// separators, then a and b are regular files in the same directory and a is
