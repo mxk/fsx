@@ -3,7 +3,6 @@ package index
 import (
 	"cmp"
 	"fmt"
-	"math"
 	"runtime"
 	"slices"
 	"sync"
@@ -280,10 +279,12 @@ func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
 				dd.ignored = append(dd.ignored, f)
 				continue
 			}
-			for _, dup := range tree.idx[f.digest] {
-				if dup.isSafeOutsideOf(root) {
-					dd.safe[f.digest] = struct{}{}
-					continue files
+			if g := tree.idx[f.digest]; len(g) > 1 {
+				for _, dup := range g {
+					if dup.isSafeOutsideOf(root) {
+						dd.safe[f.digest] = struct{}{}
+						continue files
+					}
 				}
 			}
 			if dd.lost[f.digest] = struct{}{}; len(dd.lost) > maxLost {
@@ -323,79 +324,54 @@ func (dd *dedup) dedup() *Dup {
 		dup.Lost.Sort()
 	}
 
-	// Create per-directory safe file counts
+	// Select alternate directories until all safe files are accounted for. At
+	// each iteration we count the total number of safe files in each directory
+	// and its subdirectories, pick the directory with the highest score, remove
+	// all files it contains from dd.safe, and repeat the process.
 	dd.uniqueDirs = dd.uniqueDirs[:0]
 	if dd.safeCount == nil {
 		dd.safeCount = make(map[Path]int)
-	} else {
-		clear(dd.safeCount)
 	}
-	for g := range dd.safe {
-		for _, f := range dd.tree.idx[g] {
-			if f.isSafeOutsideOf(dd.root) {
-				d := dd.tree.dirs[f.Dir()]
-				if d.atom != nil {
-					d = d.atom
-				}
-				dd.uniqueDirs.add(d.Path)
-			}
-		}
-		dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
-	}
-
-	// Select alternate directories until all safe files are accounted for. At
-	// each iteration, we select an alternate directory based on a quality
-	// score, remove all files it contains from dd.safe, decrement dd.safeCount,
-	// and repeat the process with the next best directory.
-	//
-	// Scoring is based on the total number of unique files and the ratio of
-	// desired vs. extraneous files. Directories containing root are not
-	// desirable because they make it hard to determine where the copies are.
-	// Directories closer to root are slightly preferred for easier navigation.
-	// Ties are broken by path sort order to ensure deterministic output.
 	for len(dd.safe) > 0 {
-		bestScore, bestDir := -math.MaxFloat64, Path{}
-		for p, n := range dd.safeCount {
-			alt := dd.tree.dirs[p]
-			score := float64(n)*(float64(1+n)/float64(1+alt.uniqueFiles)) +
-				2.0/float64(1+dd.root.Dist(p))
-			if p.Contains(dd.root.Path) {
-				score -= float64(len(dd.safe))
+		// Create per-directory safe file counts
+		clear(dd.safeCount)
+		for g := range dd.safe {
+			for _, f := range dd.tree.idx[g] {
+				if f.isSafeOutsideOf(dd.root) {
+					d := dd.tree.dirs[f.Dir()]
+					if d.atom != nil {
+						d = d.atom
+					}
+					dd.uniqueDirs.add(d.Path)
+				}
 			}
-			if bestScore < score || (bestScore == score && alt.Path.cmp(bestDir) < 0) {
-				bestScore, bestDir = score, alt.Path
+			dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
+		}
+
+		// Find the highest score
+		maxScore, maxDir := 0.0, Path{}
+		for p, n := range dd.safeCount {
+			score := dd.root.altScore(dd.tree.dirs[p], n, len(dd.safe))
+			if maxScore < score || (maxScore == score && p.cmp(maxDir) < 0) {
+				maxScore, maxDir = score, p
 			}
 		}
-		if bestDir.p == "" {
+		if maxDir == (Path{}) {
 			panic("index: failed to find alternate directory") // Shouldn't happen
 		}
 
-		// Remove bestDir contents from safe and safeCount
+		// Remove maxDir contents from safe
 		for g := range dd.safe {
-			group := dd.tree.idx[g]
-			for _, f := range group {
-				if bestDir.Contains(f.Path) {
-					goto match
+			for _, f := range dd.tree.idx[g] {
+				if maxDir.Contains(f.Path) {
+					delete(dd.safe, g)
+					break
 				}
 			}
-			continue
-		match:
-			delete(dd.safe, g)
-			for _, f := range group {
-				if !dd.root.Contains(f.Path) {
-					dd.uniqueDirs.add(f.Dir())
-				}
-			}
-			dd.uniqueDirs.forEach(func(p Path) {
-				if n := dd.safeCount[p] - 1; n > 0 {
-					dd.safeCount[p] = n
-				} else {
-					delete(dd.safeCount, p)
-				}
-			})
 		}
-		dup.Alt = append(dup.Alt, dd.tree.dirs[bestDir])
+		dup.Alt = append(dup.Alt, dd.tree.dirs[maxDir])
 	}
+	dup.Alt.Sort()
 	dd.tree, dd.root = nil, nil
 	return dup
 }
