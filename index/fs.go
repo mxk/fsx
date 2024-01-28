@@ -48,7 +48,17 @@ func (f *File) canIgnore() bool {
 		strings.EqualFold(name, "desktop.ini")
 }
 
-// isSafeOutsideOf returns whether f is a safe file outside of d.
+// existsIn returns whether f exists in d.
+func (f *File) existsIn(d *Dir) bool {
+	return !f.flag.IsGone() && d.Path.Contains(f.Path)
+}
+
+// isSafeIn returns whether f is a safe file in d.
+func (f *File) isSafeIn(d *Dir) bool {
+	return f.flag.IsSafe() && d.Path.Contains(f.Path)
+}
+
+// isSafeOutsideOf returns whether f is a safe file outside d.
 func (f *File) isSafeOutsideOf(d *Dir) bool {
 	return f.flag.IsSafe() && !d.Path.Contains(f.Path)
 }
@@ -86,6 +96,9 @@ type Dir struct {
 	totalFiles  int   // Total number of direct and indirect files
 	uniqueFiles int   // Total number of direct and indirect unique files
 }
+
+// cmp returns -1 if d < other, 0 if d == other, and +1 if d > other.
+func (d *Dir) cmp(other *Dir) int { return d.Path.cmp(other.Path) }
 
 // updateCounts updates total directory and file counts. It assumes that no
 // files in the tree are marked as gone.
@@ -161,6 +174,4 @@ func (d *Dir) altScore(alt *Dir, safe, rem int) float64 {
 type Dirs []*Dir
 
 // Sort sorts files by path and other attributes.
-func (ds Dirs) Sort() {
-	slices.SortFunc(ds, func(a, b *Dir) int { return a.Path.cmp(b.Path) })
-}
+func (ds Dirs) Sort() { slices.SortFunc(ds, (*Dir).cmp) }

@@ -3,6 +3,7 @@ package index
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"runtime"
 	"slices"
 	"sync"
@@ -233,7 +234,7 @@ func (t *Tree) file(p Path) *File {
 	return nil
 }
 
-// dedup locates duplicate directories in the Tree.
+// dedup maintains directory deduplication state to minimize allocations.
 type dedup struct {
 	tree *Tree
 	root *Dir
@@ -247,7 +248,11 @@ type dedup struct {
 	safeCount  map[Path]int
 }
 
-// isDup returns whether root can be deduplicated.
+// isDup returns whether root can be deduplicated. This is a relatively fast
+// operation that simply ensures that every unique file under root, except those
+// that can be ignored, has at least one copy outside of root that is not marked
+// for possible removal. maxLost is the maximum number of unique files that can
+// be lost for a directory to still be considered a duplicate.
 func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
 	dd.tree, dd.root = nil, nil
 	if root.atom != nil && root.atom != root {
@@ -297,12 +302,13 @@ func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
 	if len(dd.safe) > len(dd.lost)*len(dd.lost) {
 		dd.tree, dd.root = tree, root
 	}
-	return dd.tree != nil
+	return dd.root != nil
 }
 
-// dedup returns a non-nil Dup if isDup returned true.
+// dedup returns the deduplication strategy for the directory passed to isDup.
+// It may only be called once after a call to isDup returned true.
 func (dd *dedup) dedup() *Dup {
-	if dd.tree == nil {
+	if dd.root == nil {
 		return nil
 	}
 
@@ -316,7 +322,7 @@ func (dd *dedup) dedup() *Dup {
 		dup.Lost = make(Files, 0, len(dd.lost))
 		for g := range dd.lost {
 			for _, f := range dd.tree.idx[g] {
-				if !f.flag.IsGone() && dd.root.Contains(f.Path) {
+				if f.existsIn(dd.root) {
 					dup.Lost = append(dup.Lost, f)
 				}
 			}
@@ -324,10 +330,7 @@ func (dd *dedup) dedup() *Dup {
 		dup.Lost.Sort()
 	}
 
-	// Select alternate directories until all safe files are accounted for. At
-	// each iteration we count the total number of safe files in each directory
-	// and its subdirectories, pick the directory with the highest score, remove
-	// all files it contains from dd.safe, and repeat the process.
+	// Select alternate directories until all safe files are accounted for
 	dd.uniqueDirs = dd.uniqueDirs[:0]
 	if dd.safeCount == nil {
 		dd.safeCount = make(map[Path]int)
@@ -345,31 +348,32 @@ func (dd *dedup) dedup() *Dup {
 					dd.uniqueDirs.add(d.Path)
 				}
 			}
+			if len(dd.uniqueDirs) == 0 {
+				panic("index: no alternates for a safe file") // Shouldn't happen
+			}
 			dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
 		}
 
-		// Find the highest score
-		maxScore, maxDir := 0.0, Path{}
+		// Find the next best alternate
+		maxScore, bestAlt := math.Inf(-1), (*Dir)(nil)
 		for p, n := range dd.safeCount {
-			score := dd.root.altScore(dd.tree.dirs[p], n, len(dd.safe))
-			if maxScore < score || (maxScore == score && p.cmp(maxDir) < 0) {
-				maxScore, maxDir = score, p
+			d := dd.tree.dirs[p]
+			s := dd.root.altScore(d, n, len(dd.safe))
+			if maxScore < s || (maxScore == s && d.cmp(bestAlt) < 0) {
+				maxScore, bestAlt = s, d
 			}
 		}
-		if maxDir == (Path{}) {
-			panic("index: failed to find alternate directory") // Shouldn't happen
-		}
 
-		// Remove maxDir contents from safe
+		// Remove all safe files under bestAlt from dd.safe
 		for g := range dd.safe {
 			for _, f := range dd.tree.idx[g] {
-				if maxDir.Contains(f.Path) {
+				if f.isSafeIn(bestAlt) {
 					delete(dd.safe, g)
 					break
 				}
 			}
 		}
-		dup.Alt = append(dup.Alt, dd.tree.dirs[maxDir])
+		dup.Alt = append(dup.Alt, bestAlt)
 	}
 	dup.Alt.Sort()
 	dd.tree, dd.root = nil, nil
