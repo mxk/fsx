@@ -15,34 +15,50 @@ type Path struct{ p string }
 // Root is the special "." path.
 var Root = Path{"."}
 
-// filePath wraps a path to a file. It panics if the path is not a file, not
-// slash-separated, or not clean.
-func filePath(p string) Path {
-	if p == "." || path.Clean(filepath.ToSlash(p)) != p || filepath.IsAbs(p) {
-		panic(fmt.Sprintf("index: non-clean or non-file path: %s", p))
+// dirPath creates a directory Path. It panics if the path is invalid.
+func dirPath(p string) Path {
+	if c := cleanPath(p); c != "" {
+		if c != "." && c[len(c)-1] != '/' {
+			c += "/"
+		}
+		return Path{c}
 	}
-	return Path{p}
+	panic(fmt.Sprint("index: invalid path: ", p))
 }
 
-// dirPath wraps a path to a directory.
-func dirPath(p string) Path {
-	c := path.Clean(filepath.ToSlash(p))
-	if c == "." {
-		return Root
+// filePath creates a file Path. It panics if the path is invalid.
+func filePath(p string) Path {
+	if c := (Path{cleanPath(p)}); c.isFile() {
+		return c
 	}
-	if len(p) != len(c)+1 || p[:len(c)] != c || p[len(p)-1] != '/' {
-		p = c + "/"
+	panic(fmt.Sprint("index: invalid or non-file path: ", p))
+}
+
+// strictFilePath creates a file Path. It panics if the path is not identical to
+// that returned by filePath.
+func strictFilePath(p string) Path {
+	if p == filePath(p).p {
+		return Path{p}
 	}
-	return Path{p}
+	panic(fmt.Sprint("index: non-clean file path: ", p))
+}
+
+// anyPath returns the directory and/or file interpretations of path p,
+// depending on which one is possible.
+func anyPath(p string) (dir, file Path) {
+	if p = cleanPath(p); p != "" {
+		if p == "." || p[len(p)-1] == '/' {
+			dir = Path{p}
+		} else {
+			p += "/"
+			dir, file = Path{p}, Path{p[:len(p)-1]}
+		}
+	}
+	return
 }
 
 // String returns the raw path.
 func (p Path) String() string { return p.p }
-
-// IsDir returns whether the path refers to a directory.
-func (p Path) IsDir() bool {
-	return p.p == "." || (0 < len(p.p) && p.p[len(p.p)-1] == '/')
-}
 
 // Contains returns whether other is under the directory tree p. It returns true
 // if the paths are equal (same directory) or if p is ".".
@@ -58,13 +74,21 @@ func (p Path) Dir() Path {
 		return Path{p.p[:i+1]}
 	}
 	if i < 0 {
+		if p.isEmpty() {
+			return Path{}
+		}
 		return Root
 	}
-	panic(fmt.Sprintf("index: rooted path: %s", p))
+	panic(fmt.Sprint("index: rooted path: ", p))
 }
 
 // Base returns the last element of p.
-func (p Path) Base() string { return path.Base(p.p) }
+func (p Path) Base() string {
+	if p.isEmpty() {
+		return ""
+	}
+	return path.Base(p.p)
+}
 
 // CommonRoot returns the path that is a parent of both p and other.
 func (p Path) CommonRoot(other Path) Path {
@@ -88,6 +112,19 @@ func (p Path) Dist(other Path) int {
 		p.p, other.p = p.p[len(r.p):], other.p[len(r.p):]
 	}
 	return strings.Count(p.p, "/") + strings.Count(other.p, "/")
+}
+
+// isEmpty returns whether p is an invalid empty path.
+func (p Path) isEmpty() bool { return len(p.p) == 0 }
+
+// isDir returns whether the path refers to a directory.
+func (p Path) isDir() bool {
+	return 0 < len(p.p) && (p.p == "." || p.p[len(p.p)-1] == '/')
+}
+
+// isFile returns whether the path refers to a file.
+func (p Path) isFile() bool {
+	return 0 < len(p.p) && p.p != "." && p.p[len(p.p)-1] != '/'
 }
 
 // cmp returns -1 if p < other, 0 if p == other, and +1 if p > other.
@@ -142,7 +179,7 @@ func (p Path) cmp(other Path) int {
 	// that "b" is a directory.
 	bSep := strings.IndexByte(b[len(a):], '/')
 	if bSep == 0 {
-		panic(fmt.Sprintf("index: directory without separator suffix: %s", a))
+		panic(fmt.Sprint("index: directory without separator suffix: ", a))
 	}
 	if a == "" {
 		panic("index: empty path")
@@ -168,7 +205,7 @@ func (s *steps) next() (Path, bool) {
 	if i := strings.IndexByte(s.p[s.n:], '/'); i > 0 {
 		s.n += i + 1
 	} else if s.n = len(s.p); i == 0 {
-		panic(fmt.Sprintf("index: rooted or non-clean path: %s", s)) // Shouldn't happen
+		panic(fmt.Sprint("index: rooted or non-clean path: ", s)) // Shouldn't happen
 	}
 	return Path{s.p[:s.n]}, true
 }
@@ -209,4 +246,31 @@ func (u *uniqueDirs) forEach(fn func(Path)) {
 			*u = append((*u)[:0], (*u)[1:]...)
 		}
 	}
+}
+
+// cleanPath returns a clean, slash-separated representation of p. It returns ""
+// if p is invalid. The trailing separator, if present, is preserved.
+func cleanPath(p string) string {
+	// VolumeName != "" is a superset of filepath.IsAbs test on Windows
+	if p == "" || filepath.VolumeName(p) != "" {
+		return ""
+	}
+	// path.Clean is more efficient than filepath.Clean and we want to return ""
+	// for cases handled by filepath.postClean.
+	p = filepath.ToSlash(p)
+	c := path.Clean(p)
+	if path.IsAbs(c) || (len(c) >= 2 && (c[1] == ':' || c[:2] == "..")) {
+		return ""
+	}
+	// Preserve the trailing '/' and pointer values, if possible
+	if c == "." {
+		c = Root.p
+	} else if p[len(p)-1] == '/' {
+		if len(p) == len(c)+1 && p[:len(c)] == c {
+			c = p
+		} else {
+			c += "/"
+		}
+	}
+	return c
 }

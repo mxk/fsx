@@ -2,29 +2,29 @@ package index
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestFilePath(t *testing.T) {
-	assert.Equal(t, "a", filePath("a").String())
-	assert.Equal(t, "a/b", filePath("a/b").String())
-	assert.Panics(t, func() { filePath("") })
-	assert.Panics(t, func() { filePath(".") })
-	assert.Panics(t, func() { filePath("a/") })
-}
-
 func TestDirPath(t *testing.T) {
 	assert.Equal(t, ".", dirPath(".").String())
+	assert.Equal(t, ".", dirPath("a/..").String())
 	assert.Equal(t, "a/", dirPath("./a").String())
 	assert.Equal(t, "a/b/", dirPath("a/b/").String())
+	for _, tc := range []string{"", "/", "..", "a/../..", "C:Windows", "C:/Windows", "//x/y"} {
+		assert.Panics(t, func() { dirPath(tc) }, "%q", tc)
+	}
 }
 
-func TestPathIsDir(t *testing.T) {
-	assert.True(t, Root.IsDir())
-	assert.False(t, Path{"a"}.IsDir())
-	assert.True(t, Path{"a/"}.IsDir())
+func TestStrictFilePath(t *testing.T) {
+	for _, tc := range []string{"a", "a/b"} {
+		assert.Equal(t, tc, strictFilePath(tc).String(), "%q", tc)
+	}
+	for _, tc := range []string{"", ".", "/a", "a/", "./a", "a/./b"} {
+		assert.Panics(t, func() { strictFilePath(tc) }, "%q", tc)
+	}
 }
 
 func TestPathContains(t *testing.T) {
@@ -105,6 +105,20 @@ func TestPathDist(t *testing.T) {
 		assert.Equal(t, tc.dist, Path{tc.a}.Dist(Path{tc.b}), "%q", tc)
 		assert.Equal(t, tc.dist, Path{tc.b}.Dist(Path{tc.a}), "%q", tc)
 	}
+}
+
+func TestPathIsDir(t *testing.T) {
+	assert.False(t, Path{}.isDir())
+	assert.True(t, Root.isDir())
+	assert.False(t, Path{"a"}.isDir())
+	assert.True(t, Path{"a/"}.isDir())
+}
+
+func TestPathIsFile(t *testing.T) {
+	assert.False(t, Path{}.isFile())
+	assert.False(t, Root.isFile())
+	assert.True(t, Path{"a"}.isFile())
+	assert.False(t, Path{"a/"}.isFile())
 }
 
 func TestPathCmp(t *testing.T) {
@@ -251,4 +265,28 @@ func TestUniqueDirs(t *testing.T) {
 	u.forEach(fn)
 	require.Equal(t, want, have)
 	require.Empty(t, u)
+}
+
+func TestCleanPath(t *testing.T) {
+	tests := []struct{ have, want string }{
+		{"", ""},
+		{"/", ""},
+		{`\\`, ""},
+		{"C:", ""},
+		{"a/../c:", ""},
+		{"a/../..", ""},
+		{"../a", ""},
+		{"./", "."},
+		{"./a/", "a/"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, cleanPath(tc.have), "%q", tc)
+	}
+
+	// Do not reallocate clean paths
+	for _, tc := range []string{".", "a", "a/", "a/b", "a/b/"} {
+		if p := cleanPath(tc); assert.Equal(t, tc, p) {
+			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(p))
+		}
+	}
 }

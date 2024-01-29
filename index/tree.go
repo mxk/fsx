@@ -3,6 +3,7 @@ package index
 import (
 	"cmp"
 	"fmt"
+	"io/fs"
 	"runtime"
 	"slices"
 	"sync"
@@ -56,13 +57,13 @@ func (idx *Index) ToTree() *Tree {
 					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
 						return c
 					}
-					panic(fmt.Sprintf("index: duplicate directory name: %s", a))
+					panic(fmt.Sprint("index: duplicate directory name: ", a))
 				})
 				slices.SortFunc(d.files, func(a, b *File) int {
 					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
 						return c
 					}
-					panic(fmt.Sprintf("index: duplicate file name: %s", a))
+					panic(fmt.Sprint("index: duplicate file name: ", a))
 				})
 			}
 		}(sort)
@@ -81,6 +82,9 @@ func (idx *Index) ToTree() *Tree {
 
 	// Update directory and file counts
 	t.dirs[Root].updateCounts()
+	if _, ok := t.dirs[Path{}]; ok { // Sanity check
+		panic("index: corrupt directory tree")
+	}
 	return t
 }
 
@@ -94,9 +98,50 @@ func (t *Tree) ToIndex() *Index {
 	return New(t.root, all)
 }
 
-// Dir returns the specified directory, if it exists.
-func (t *Tree) Dir(name string) *Dir {
-	return t.dirs[dirPath(name)]
+// Dir returns the specified directory or nil if it does not exist.
+func (t *Tree) Dir(name string) *Dir { return t.dirs[dirPath(name)] }
+
+// File returns the specified file or nil if it does not exist.
+func (t *Tree) File(name string) *File { return t.file(filePath(name)) }
+
+// MarkDup sets the duplicate flag for a single file or all files under a
+// directory. Files that are already marked are unaffected.
+func (t *Tree) MarkDup(name string) error { return t.mark(name, flagDup) }
+
+// MarkJunk sets the junk flag for a single file or all files under a directory.
+// Files that are already marked are unaffected.
+func (t *Tree) MarkJunk(name string) error { return t.mark(name, flagJunk) }
+
+// MarkKeep sets the keep flag for a single file or all files under a directory.
+// Files that are already marked are unaffected.
+func (t *Tree) MarkKeep(name string) error { return t.mark(name, flagKeep) }
+
+// mark sets the specified flag for a single file or all files under a
+// directory.
+func (t *Tree) mark(name string, flag Flag) error {
+	set := func(f *File, flag Flag) {
+		if f.flag&flagKeep == 0 {
+			f.flag |= flag
+		}
+	}
+	if flag == 0 || flag&^flagKeep != 0 {
+		panic("index: invalid flag")
+	}
+	dir, file := anyPath(name)
+	if d := t.dirs[dir]; d != nil {
+		var dirs dirStack
+		for dirs.from(d); len(dirs) > 0; {
+			for _, f := range dirs.next().files {
+				set(f, flag)
+			}
+		}
+		return nil
+	}
+	if f := t.file(file); f != nil {
+		set(f, flag)
+		return nil
+	}
+	return fmt.Errorf("index: %w: %s", fs.ErrNotExist, name)
 }
 
 // Dups returns directories under dir that contain duplicate data. If maxDups is
@@ -209,7 +254,7 @@ func (t *Tree) addFile(f *File) {
 // file returns the specified file, if it exists.
 func (t *Tree) file(p Path) *File {
 	d := t.dirs[p.Dir()]
-	if p.IsDir() || d == nil {
+	if d == nil || p.isDir() {
 		return nil
 	}
 	base := p.Base()

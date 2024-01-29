@@ -209,7 +209,7 @@ func (d *Dir) altScore(alt *Dir, safe, rem int) float64 {
 		score /= 2
 	}
 	if !(0 <= score && score <= 1) {
-		panic(fmt.Sprintf("index: invalid score: %f", score))
+		panic(fmt.Sprint("index: invalid score: ", score))
 	}
 	return score
 }

@@ -128,7 +128,7 @@ func read(src io.Reader) (*Index, error) {
 
 			// Path and modification time
 			p, ln, _ := bytes.Cut(ln, []byte("\t//"))
-			f := &File{Path: filePath(string(p)), flag: flag}
+			f := &File{Path: strictFilePath(string(p)), flag: flag}
 			if len(ln) > 0 {
 				if err := f.modTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
 					return nil, fmt.Errorf("index: invalid modification time on line %d", line)
@@ -204,7 +204,7 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 func (idx *Index) Write(dst io.Writer) error {
 	w, err := zstd.NewWriter(dst)
 	if err != nil {
-		return err
+		panic(err) // Invalid option(s)
 	}
 	if err = idx.write(w); err == nil {
 		err = w.Close()
@@ -245,7 +245,7 @@ func (idx *Index) write(dst io.Writer) error {
 				lineWidth = append(lineWidth, 0)
 			}
 			if f.digest != g[0].digest || f.size != g[0].size {
-				panic(fmt.Sprintf("index: group digest/size mismatch: %s", f))
+				panic(fmt.Sprint("index: group digest/size mismatch: ", f))
 			}
 		}
 		if empty {
