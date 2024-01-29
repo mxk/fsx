@@ -38,11 +38,7 @@ func (cmd *updateCmd) Main(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err = os.Rename(args[0], args[0]+".bak"); err != nil {
-		return err
-	}
-	err = cli.WriteFileAtomic(args[0], func(f *os.File) error { return idx.Write(f) })
-	if err == nil && m.walkErr {
+	if err = idx.Save(args[0]); err == nil && m.walkErr {
 		err = cli.ExitCode(1)
 	}
 	return err

@@ -5,9 +5,12 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,6 +52,46 @@ func Load(name string) (*Index, error) {
 		err = err2
 	}
 	return idx, err
+}
+
+// Save saves index contents to the specified file path. If the file already
+// exists, it is first renamed with a ".bak" extension.
+func (idx *Index) Save(name string) error { return idx.save(name, true) }
+
+// Overwrite saves index contents to the specified file path. If the file
+// already exists, it is overwritten.
+func (idx *Index) Overwrite(name string) error { return idx.save(name, false) }
+
+// save saves index contents to the specified file path. If backup is true and
+// the file already exists, it is first renamed by adding a ".bak" extension.
+func (idx *Index) save(name string, backup bool) (err error) {
+	name = filepath.Clean(name)
+	f, err := os.CreateTemp(filepath.Dir(name), filepath.Base(name)+".*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = f.Close()
+			_ = os.Remove(f.Name())
+		}
+	}()
+	if err = idx.Write(f); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if backup {
+		if fi, err := os.Lstat(name); err == nil && !fi.Mode().IsRegular() {
+			return fmt.Errorf("index: cannot backup irregular file: %s", name)
+		}
+		err = os.Rename(name, name+".bak")
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	return os.Rename(f.Name(), name)
 }
 
 // Read reads index contents from src.

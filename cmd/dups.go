@@ -10,7 +10,7 @@ import (
 
 var _ = cli.Main.Add(&cli.Cfg{
 	Name:    "dups",
-	Usage:   "<db>",
+	Usage:   "<index>",
 	Summary: "Find duplicate directories",
 	MinArgs: 1,
 	MaxArgs: 1,
