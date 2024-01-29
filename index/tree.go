@@ -18,13 +18,14 @@ type Tree struct {
 // ToTree converts from an index to a tree representation.
 func (idx *Index) ToTree() *Tree {
 	if len(idx.groups) == 0 {
-		return &Tree{root: idx.root}
+		return &Tree{root: idx.root, dirs: map[Path]*Dir{Root: {Path: Root}}}
 	}
 	t := &Tree{
 		root: idx.root,
 		dirs: make(map[Path]*Dir, len(idx.groups)/8),
 		idx:  make(map[Digest]Files, len(idx.groups)),
 	}
+	t.dirs[Root] = &Dir{Path: Root}
 
 	// Add each file to the tree, creating all required Dir entries and updating
 	// unique file counts.
@@ -79,11 +80,7 @@ func (idx *Index) ToTree() *Tree {
 	wg.Wait()
 
 	// Update directory and file counts
-	if root := t.dirs[Root]; root != nil {
-		root.updateCounts()
-	} else {
-		t.dirs = nil
-	}
+	t.dirs[Root].updateCounts()
 	return t
 }
 
