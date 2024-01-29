@@ -46,25 +46,25 @@ func Load(name string) (*Index, error) {
 			_ = f.Close()
 		}
 	}()
-	idx, err := Read(f)
+	x, err := Read(f)
 	err2 := f.Close()
 	if f = nil; err == nil {
 		err = err2
 	}
-	return idx, err
+	return x, err
 }
 
 // Save saves index contents to the specified file path. If the file already
 // exists, it is first renamed with a ".bak" extension.
-func (idx *Index) Save(name string) error { return idx.save(name, true) }
+func (x *Index) Save(name string) error { return x.save(name, true) }
 
 // Overwrite saves index contents to the specified file path. If the file
 // already exists, it is overwritten.
-func (idx *Index) Overwrite(name string) error { return idx.save(name, false) }
+func (x *Index) Overwrite(name string) error { return x.save(name, false) }
 
 // save saves index contents to the specified file path. If backup is true and
 // the file already exists, it is first renamed by adding a ".bak" extension.
-func (idx *Index) save(name string, backup bool) (err error) {
+func (x *Index) save(name string, backup bool) (err error) {
 	name = filepath.Clean(name)
 	f, err := os.CreateTemp(filepath.Dir(name), filepath.Base(name)+".*")
 	if err != nil {
@@ -76,7 +76,7 @@ func (idx *Index) save(name string, backup bool) (err error) {
 			_ = os.Remove(f.Name())
 		}
 	}()
-	if err = idx.Write(f); err != nil {
+	if err = x.Write(f); err != nil {
 		return err
 	}
 	if err = f.Close(); err != nil {
@@ -201,19 +201,19 @@ func readHeader(s *bufio.Scanner) (line int, root string, err error) {
 }
 
 // Write writes index contents to dst.
-func (idx *Index) Write(dst io.Writer) error {
+func (x *Index) Write(dst io.Writer) error {
 	w, err := zstd.NewWriter(dst)
 	if err != nil {
 		panic(err) // Invalid option(s)
 	}
-	if err = idx.write(w); err == nil {
+	if err = x.write(w); err == nil {
 		err = w.Close()
 	}
 	return err
 }
 
 // write writes uncompressed index contents to dst.
-func (idx *Index) write(dst io.Writer) error {
+func (x *Index) write(dst io.Writer) error {
 	const digestHex = 2 * len(Digest{})
 	const minAlign = 2*tabWidth + digestHex + tabWidth + (11 &^ (tabWidth - 1)) + tabWidth
 	buf := func(w *bufio.Writer, c int) (b []byte) {
@@ -230,9 +230,9 @@ func (idx *Index) write(dst io.Writer) error {
 	}
 
 	w := bufio.NewWriter(dst)
-	idx.writeHeader(w)
+	x.writeHeader(w)
 	lineWidth := make([]int, 0, 16)
-	for _, g := range idx.groups {
+	for _, g := range x.groups {
 		// Calculate path widths
 		empty := true
 		align, lineWidth := minAlign, lineWidth[:0]
@@ -291,24 +291,24 @@ func (idx *Index) write(dst io.Writer) error {
 }
 
 // writeHeader writes the index version and root path to w.
-func (idx *Index) writeHeader(w *bufio.Writer) {
+func (x *Index) writeHeader(w *bufio.Writer) {
 	_, _ = w.WriteString(v1)
 	_ = w.WriteByte('\n')
-	_, _ = w.WriteString(idx.root)
+	_, _ = w.WriteString(x.root)
 	_ = w.WriteByte('\n')
 }
 
 // Root returns the index root directory.
-func (idx *Index) Root() string { return idx.root }
+func (x *Index) Root() string { return x.root }
 
 // Files returns all files.
-func (idx *Index) Files() Files {
+func (x *Index) Files() Files {
 	var n int
-	for _, g := range idx.groups {
+	for _, g := range x.groups {
 		n += len(g)
 	}
 	all := make(Files, 0, n)
-	for _, g := range idx.groups {
+	for _, g := range x.groups {
 		all = append(all, g...)
 	}
 	all.Sort()

@@ -17,21 +17,21 @@ type Tree struct {
 }
 
 // ToTree converts from an index to a tree representation.
-func (idx *Index) ToTree() *Tree {
-	if len(idx.groups) == 0 {
-		return &Tree{root: idx.root, dirs: map[Path]*Dir{Root: {Path: Root}}}
+func (x *Index) ToTree() *Tree {
+	if len(x.groups) == 0 {
+		return &Tree{root: x.root, dirs: map[Path]*Dir{Root: {Path: Root}}}
 	}
 	t := &Tree{
-		root: idx.root,
-		dirs: make(map[Path]*Dir, len(idx.groups)/8),
-		idx:  make(map[Digest]Files, len(idx.groups)),
+		root: x.root,
+		dirs: make(map[Path]*Dir, len(x.groups)/8),
+		idx:  make(map[Digest]Files, len(x.groups)),
 	}
 	t.dirs[Root] = &Dir{Path: Root}
 
 	// Add each file to the tree, creating all required Dir entries and updating
 	// unique file counts.
 	var dirs uniqueDirs
-	for _, g := range idx.groups {
+	for _, g := range x.groups {
 		if _, dup := t.idx[g[0].digest]; dup {
 			panic(fmt.Sprintf("index: digest collision: %x", g[0].digest))
 		}

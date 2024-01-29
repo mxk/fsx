@@ -17,14 +17,14 @@ var _ = indexCli.Add(&cli.Cfg{
 type keepCmd struct{}
 
 func (keepCmd) Main(args []string) error {
-	idx, err := index.Load(args[0])
+	x, err := index.Load(args[0])
 	if err != nil {
 		return err
 	}
 	for _, name := range args[1:] {
-		if err = idx.ToTree().MarkKeep(name); err != nil {
+		if err = x.ToTree().MarkKeep(name); err != nil {
 			return err
 		}
 	}
-	return idx.Save(args[0])
+	return x.Save(args[0])
 }

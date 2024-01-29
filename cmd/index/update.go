@@ -23,22 +23,22 @@ type updateCmd struct {
 }
 
 func (cmd *updateCmd) Main(args []string) error {
-	idx, err := index.Load(args[0])
+	x, err := index.Load(args[0])
 	if err != nil {
 		return err
 	}
 	if cmd.Root == "" {
-		cmd.Root = idx.Root()
+		cmd.Root = x.Root()
 	}
 	if _, err := os.Stat(cmd.Root); err != nil {
 		return err
 	}
 	var m monitor
-	idx, err = idx.ToTree().Rescan(context.Background(), os.DirFS(cmd.Root), m.err, m.report)
+	x, err = x.ToTree().Rescan(context.Background(), os.DirFS(cmd.Root), m.err, m.report)
 	if err != nil {
 		return err
 	}
-	if err = idx.Save(args[0]); err == nil && m.walkErr {
+	if err = x.Save(args[0]); err == nil && m.walkErr {
 		err = cli.ExitCode(1)
 	}
 	return err

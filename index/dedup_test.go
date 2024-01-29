@@ -10,9 +10,9 @@ import (
 
 func TestDedup(t *testing.T) {
 	tree := func(fsys fstest.MapFS) *Tree {
-		idx, err := Scan(context.Background(), fsys, nil, nil)
+		x, err := Scan(context.Background(), fsys, nil, nil)
 		require.NoError(t, err)
-		return idx.ToTree()
+		return x.ToTree()
 	}
 
 	var dd dedup

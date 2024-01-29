@@ -26,7 +26,7 @@ func TestScan(t *testing.T) {
 		"Y/c": {Data: b1, ModTime: t2},
 		"d":   {Data: b3, ModTime: t1},
 	}
-	idx, err := Scan(context.Background(), fsys, nil, nil)
+	x, err := Scan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
 	want := &Index{groups: []Files{
 		{
@@ -38,7 +38,7 @@ func TestScan(t *testing.T) {
 			{Path{"d"}, d3, 3, t1, flagNone},
 		},
 	}}
-	require.Equal(t, want, idx)
+	require.Equal(t, want, x)
 
 	// Remove, modify, and create files
 	delete(fsys, "X/a")
@@ -47,11 +47,11 @@ func TestScan(t *testing.T) {
 	fsys["e"] = &fstest.MapFile{Data: b1, ModTime: t2}
 
 	// Rescan
-	tr := idx.ToTree()
+	tr := x.ToTree()
 	tr.file(Path{"X/a"}).flag = flagJunk
 	tr.file(Path{"X/b"}).flag = flagKeep
 	tr.file(Path{"d"}).flag = flagDup
-	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
+	x, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
 	want = &Index{groups: []Files{
 		{
@@ -64,16 +64,16 @@ func TestScan(t *testing.T) {
 			{Path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
 		},
 	}}
-	require.Equal(t, want, idx)
+	require.Equal(t, want, x)
 
 	// Restore original X/b and touch d
 	fsys["X/b"].Data = b2
 	fsys["d"].ModTime = t2
 
 	// Rescan
-	tr = idx.ToTree()
+	tr = x.ToTree()
 	tr.file(Path{"e"}).flag |= flagDup | flagGone
-	idx, err = tr.Rescan(context.Background(), fsys, nil, nil)
+	x, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
 	want = &Index{groups: []Files{
 		{
@@ -87,19 +87,19 @@ func TestScan(t *testing.T) {
 			{Path{"d"}, d3, 3, t1, flagDup | flagGone},
 		},
 	}}
-	require.Equal(t, want, idx)
+	require.Equal(t, want, x)
 
 	// Verify Tree structure
 	X := &Dir{
 		Path:        Path{"X/"},
-		files:       Files{idx.groups[1][0]},
+		files:       Files{x.groups[1][0]},
 		totalFiles:  1,
 		uniqueFiles: 1,
 	}
 	root := &Dir{
 		Path:        Root,
 		dirs:        Dirs{X},
-		files:       Files{idx.groups[2][0], idx.groups[0][1]},
+		files:       Files{x.groups[2][0], x.groups[0][1]},
 		totalDirs:   1,
 		totalFiles:  3,
 		uniqueFiles: 3,
@@ -112,7 +112,7 @@ func TestScan(t *testing.T) {
 			d3: want.groups[2],
 		},
 	}
-	require.Equal(t, wantTree, idx.ToTree())
+	require.Equal(t, wantTree, x.ToTree())
 
 	// Rescan
 	for _, g := range want.groups {
@@ -122,9 +122,9 @@ func TestScan(t *testing.T) {
 			}
 		}
 	}
-	idx, err = idx.ToTree().Rescan(context.Background(), fsys, nil, nil)
+	x, err = x.ToTree().Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
-	require.Equal(t, want, idx)
+	require.Equal(t, want, x)
 }
 
 func TestProgress(t *testing.T) {

@@ -23,7 +23,7 @@ func TestToTree(t *testing.T) {
 	y1 := &File{digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}}
 	yX := &File{digest: d5, Path: Path{"C/.git/X/.git/Z/y1"}, flag: flagGone}
 
-	idx := Index{
+	x := Index{
 		root:   "/",
 		groups: []Files{{a1, a2, a3}, {b1, b2}, {c1, c2}, {x1}, {y1, yX}},
 	}
@@ -112,7 +112,7 @@ func TestToTree(t *testing.T) {
 	}
 
 	want := &Tree{
-		root: idx.root,
+		root: x.root,
 		dirs: map[Path]*Dir{
 			Root:      root,
 			A.Path:    A,
@@ -135,7 +135,7 @@ func TestToTree(t *testing.T) {
 		},
 	}
 
-	have := idx.ToTree()
+	have := x.ToTree()
 	mapEqual(t, want.dirs, have.dirs)
 	mapEqual(t, want.idx, have.idx)
 	assert.Equal(t, want, have)
@@ -147,18 +147,18 @@ func TestEmptyTree(t *testing.T) {
 	require.Equal(t, &Index{root: "/"}, want.ToIndex())
 
 	d1 := Digest{1}
-	idx := &Index{root: "/", groups: []Files{{
+	x := &Index{root: "/", groups: []Files{{
 		{Path{"x"}, d1, 1, time.Time{}, flagDup | flagGone},
 	}}}
-	want.idx = map[Digest]Files{d1: idx.groups[0]}
-	require.Equal(t, want, idx.ToTree())
-	require.Equal(t, idx, want.ToIndex())
+	want.idx = map[Digest]Files{d1: x.groups[0]}
+	require.Equal(t, want, x.ToTree())
+	require.Equal(t, x, want.ToIndex())
 }
 
 func TestToIndex(t *testing.T) {
-	idx, err := read(strings.NewReader(testIdx))
+	x, err := read(strings.NewReader(testIdx))
 	require.NoError(t, err)
-	require.Equal(t, idx, idx.ToTree().ToIndex())
+	require.Equal(t, x, x.ToTree().ToIndex())
 }
 
 func TestDups(t *testing.T) {
@@ -170,8 +170,8 @@ func TestDups(t *testing.T) {
 	c0, c1 := file(d3, "A/c0"), file(d3, "B/c1")
 	c1.flag |= flagGone
 
-	idx := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
-	tr := idx.ToTree()
+	x := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
+	tr := x.ToTree()
 	want := []*Dup{{
 		Dir:  tr.dirs[Path{"A/"}],
 		Alt:  Dirs{tr.dirs[Path{"B/"}]},

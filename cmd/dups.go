@@ -20,11 +20,11 @@ var _ = cli.Main.Add(&cli.Cfg{
 type dupCmd struct{}
 
 func (cmd *dupCmd) Main(args []string) error {
-	idx, err := index.Load(args[0])
+	x, err := index.Load(args[0])
 	if err != nil {
 		return err
 	}
-	t := idx.ToTree()
+	t := x.ToTree()
 	dups := t.Dups(index.Root, 0, 10)
 	for _, dup := range dups {
 		fmt.Println(dup.Dir.Path)
