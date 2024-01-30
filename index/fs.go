@@ -10,7 +10,7 @@ import (
 
 // File is a regular file in the file system.
 type File struct {
-	Path
+	path
 	digest  Digest
 	size    int64
 	modTime time.Time
@@ -42,29 +42,29 @@ func (f *File) canIgnore() bool {
 	if f.size == 0 {
 		return true
 	}
-	name := f.Base()
+	name := f.base()
 	return strings.EqualFold(name, "Thumbs.db") ||
 		strings.EqualFold(name, "desktop.ini")
 }
 
 // existsIn returns whether f exists in d.
 func (f *File) existsIn(d *Dir) bool {
-	return !f.flag.IsGone() && d.Path.Contains(f.Path)
+	return !f.flag.IsGone() && d.path.contains(f.path)
 }
 
 // isSafeIn returns whether f is a safe file in d.
 func (f *File) isSafeIn(d *Dir) bool {
-	return f.flag.IsSafe() && d.Path.Contains(f.Path)
+	return f.flag.IsSafe() && d.path.contains(f.path)
 }
 
 // isSafeOutsideOf returns whether f is a safe file outside d.
 func (f *File) isSafeOutsideOf(d *Dir) bool {
-	return f.flag.IsSafe() && !d.Path.Contains(f.Path)
+	return f.flag.IsSafe() && !d.path.contains(f.path)
 }
 
 // cmp returns -1 if f < other, 0 if f == other, and +1 if f > other.
 func (f *File) cmp(other *File) int {
-	if c := f.Path.cmp(other.Path); c != 0 {
+	if c := f.path.cmp(other.path); c != 0 {
 		return c
 	}
 	if c := cmp.Compare(f.flag&flagGone, other.flag&flagGone); c != 0 {
@@ -87,7 +87,7 @@ func (fs Files) Sort() { slices.SortFunc(fs, (*File).cmp) }
 
 // Dir is a directory in the file system.
 type Dir struct {
-	Path
+	path
 	dirs        Dirs  // Subdirectories
 	files       Files // Files in this directory
 	atom        *Dir  // Atomic container directory, such as .git
@@ -97,7 +97,7 @@ type Dir struct {
 }
 
 // cmp returns -1 if d < other, 0 if d == other, and +1 if d > other.
-func (d *Dir) cmp(other *Dir) int { return d.Path.cmp(other.Path) }
+func (d *Dir) cmp(other *Dir) int { return d.path.cmp(other.path) }
 
 // updateCounts updates total directory and file counts. It assumes that no
 // files in the tree are marked as gone.

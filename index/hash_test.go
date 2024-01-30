@@ -33,10 +33,10 @@ func TestHasher(t *testing.T) {
 		"~":         {Data: v31744, ModTime: t2},
 	}
 	want := Files{
-		&File{Path{"a/b"}, d1, 1, t1, flagNone},
-		&File{Path{testVec[:2]}, d2, 0, t1, flagNone},
-		&File{Path{"012"}, d3, 3, t2, flagNone},
-		&File{Path{"~"}, d31744, 31744, t2, flagNone},
+		&File{path{"a/b"}, d1, 1, t1, flagNone},
+		&File{path{testVec[:2]}, d2, 0, t1, flagNone},
+		&File{path{"012"}, d3, 3, t2, flagNone},
+		&File{path{"~"}, d31744, 31744, t2, flagNone},
 	}
 
 	h := NewHasher(nil)

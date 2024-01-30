@@ -24,7 +24,7 @@ type dedup struct {
 	lost    map[Digest]struct{}
 
 	uniqueDirs uniqueDirs
-	safeCount  map[Path]int
+	safeCount  map[path]int
 }
 
 // isDup returns whether root can be deduplicated. This is a relatively fast
@@ -112,7 +112,7 @@ func (dd *dedup) dedup() *Dup {
 	// Select alternate directories until all safe files are accounted for
 	dd.uniqueDirs = dd.uniqueDirs[:0]
 	if dd.safeCount == nil {
-		dd.safeCount = make(map[Path]int)
+		dd.safeCount = make(map[path]int)
 	}
 	for len(dd.safe) > 0 {
 		// Create per-directory safe file counts
@@ -120,17 +120,17 @@ func (dd *dedup) dedup() *Dup {
 		for g := range dd.safe {
 			for _, f := range dd.tree.idx[g] {
 				if f.isSafeOutsideOf(dd.root) {
-					d := dd.tree.dirs[f.Dir()]
+					d := dd.tree.dirs[f.dir()]
 					if d.atom != nil {
 						d = d.atom
 					}
-					dd.uniqueDirs.add(d.Path)
+					dd.uniqueDirs.add(d.path)
 				}
 			}
 			if len(dd.uniqueDirs) == 0 {
 				panic("index: no alternates for a safe file") // Shouldn't happen
 			}
-			dd.uniqueDirs.forEach(func(p Path) { dd.safeCount[p]++ })
+			dd.uniqueDirs.forEach(func(p path) { dd.safeCount[p]++ })
 		}
 
 		// Find the next best alternate
@@ -196,7 +196,7 @@ func (d *Dir) altScore(alt *Dir, safe, rem int) float64 {
 
 	// A perfect match is close to d. We only count the number of steps to the
 	// common root because we don't want to penalize more specific matches.
-	dist := 1 / float64(d.Dist(d.CommonRoot(alt.Path)))
+	dist := 1 / float64(d.dist(d.commonRoot(alt.path)))
 
 	// TODO: Favor directories with flagKeep files
 
@@ -205,7 +205,7 @@ func (d *Dir) altScore(alt *Dir, safe, rem int) float64 {
 	score := (5*a)*match + a*files + a*dirs + a*dist
 
 	// A perfect match does not contain d.
-	if alt.Contains(d.Path) {
+	if alt.contains(d.path) {
 		score /= 2
 	}
 	if !(0 <= score && score <= 1) {

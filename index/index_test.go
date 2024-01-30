@@ -31,19 +31,19 @@ func TestIndexReadWrite(t *testing.T) {
 	want := &Index{
 		root: "/",
 		groups: []Files{{
-			{Path{"d1/a"}, d1, 1, t0, flagKeep},
-			{Path{"d2/a"}, d1, 1, t0, flagNone},
-			{Path{"a"}, d1, 1, t0, flagNone},
+			{path{"d1/a"}, d1, 1, t0, flagKeep},
+			{path{"d2/a"}, d1, 1, t0, flagNone},
+			{path{"a"}, d1, 1, t0, flagNone},
 		}, {
-			{Path{"b"}, d2, 2, t1, flagNone},
-			{Path{"gone1"}, d2, 2, t1, flagGone},
+			{path{"b"}, d2, 2, t1, flagNone},
+			{path{"gone1"}, d2, 2, t1, flagGone},
 		}, {
-			{Path{"gone2"}, d2, 2, t1, flagGone},
+			{path{"gone2"}, d2, 2, t1, flagGone},
 		}, {
-			{Path{"c"}, d3, 3, t0, flagNone},
-			{Path{"d\t"}, d3, 3, t0, flagDup},
-			{Path{"e \t"}, d3, 3, t1, flagDup | flagGone},
-			{Path{"f"}, d3, 3, t1, flagNone},
+			{path{"c"}, d3, 3, t0, flagNone},
+			{path{"d\t"}, d3, 3, t0, flagDup},
+			{path{"e \t"}, d3, 3, t1, flagDup | flagGone},
+			{path{"f"}, d3, 3, t1, flagNone},
 		}},
 	}
 

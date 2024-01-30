@@ -12,21 +12,21 @@ import (
 // Tree is a directory tree representation of the index.
 type Tree struct {
 	root string
-	dirs map[Path]*Dir
+	dirs map[path]*Dir
 	idx  map[Digest]Files
 }
 
 // ToTree converts from an index to a tree representation.
 func (x *Index) ToTree() *Tree {
 	if len(x.groups) == 0 {
-		return &Tree{root: x.root, dirs: map[Path]*Dir{Root: {Path: Root}}}
+		return &Tree{root: x.root, dirs: map[path]*Dir{root: {path: root}}}
 	}
 	t := &Tree{
 		root: x.root,
-		dirs: make(map[Path]*Dir, len(x.groups)/8),
+		dirs: make(map[path]*Dir, len(x.groups)/8),
 		idx:  make(map[Digest]Files, len(x.groups)),
 	}
-	t.dirs[Root] = &Dir{Path: Root}
+	t.dirs[root] = &Dir{path: root}
 
 	// Add each file to the tree, creating all required Dir entries and updating
 	// unique file counts.
@@ -39,10 +39,10 @@ func (x *Index) ToTree() *Tree {
 		for _, f := range g {
 			if !f.flag.IsGone() {
 				t.addFile(f)
-				dirs.add(f.Dir()) // TODO: Don't count files that are ignored?
+				dirs.add(f.dir()) // TODO: Don't count files that are ignored?
 			}
 		}
-		dirs.forEach(func(p Path) { t.dirs[p].uniqueFiles++ })
+		dirs.forEach(func(p path) { t.dirs[p].uniqueFiles++ })
 	}
 
 	// Sort directories and files, and find atomic directories
@@ -54,13 +54,13 @@ func (x *Index) ToTree() *Tree {
 			defer wg.Done()
 			for d := range sort {
 				slices.SortFunc(d.dirs, func(a, b *Dir) int {
-					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
+					if c := cmp.Compare(a.base(), b.base()); c != 0 {
 						return c
 					}
 					panic(fmt.Sprint("index: duplicate directory name: ", a))
 				})
 				slices.SortFunc(d.files, func(a, b *File) int {
-					if c := cmp.Compare(a.Base(), b.Base()); c != 0 {
+					if c := cmp.Compare(a.base(), b.base()); c != 0 {
 						return c
 					}
 					panic(fmt.Sprint("index: duplicate file name: ", a))
@@ -71,7 +71,7 @@ func (x *Index) ToTree() *Tree {
 	var subtree dirStack
 	for _, d := range t.dirs {
 		sort <- d
-		if d.atom == nil && isAtomic(d.Base()) {
+		if d.atom == nil && isAtomic(d.base()) {
 			for subtree.from(d); len(subtree) > 0; {
 				subtree.next().atom = d
 			}
@@ -81,8 +81,8 @@ func (x *Index) ToTree() *Tree {
 	wg.Wait()
 
 	// Update directory and file counts
-	t.dirs[Root].updateCounts()
-	if _, ok := t.dirs[Path{}]; ok { // Sanity check
+	t.dirs[root].updateCounts()
+	if _, ok := t.dirs[path{}]; ok { // Sanity check
 		panic("index: corrupt directory tree")
 	}
 	return t
@@ -148,8 +148,8 @@ func (t *Tree) mark(name string, flag Flag) error {
 // > 0, at most that many directories are returned. maxLost is the maximum
 // number of unique files that can be lost for a directory to still be
 // considered a duplicate.
-func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
-	root := t.dirs[dir]
+func (t *Tree) Dups(dir string, maxDups, maxLost int) []*Dup {
+	root := t.dirs[dirPath(dir)]
 	if root == nil || len(root.dirs) == 0 {
 		return nil
 	}
@@ -202,7 +202,7 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 		case d, ok := <-dup:
 			if !ok {
 				// All workers have returned
-				slices.SortFunc(dups, func(a, b *Dup) int { return a.Path.cmp(b.Path) })
+				slices.SortFunc(dups, func(a, b *Dup) int { return a.path.cmp(b.path) })
 				if maxDups <= 0 || len(dups) < maxDups {
 					maxDups = len(dups)
 				}
@@ -233,33 +233,33 @@ func (t *Tree) Dups(dir Path, maxDups, maxLost int) []*Dup {
 
 // addFile adds file f to the tree, creating any required parent directories.
 func (t *Tree) addFile(f *File) {
-	name := f.Dir()
+	name := f.dir()
 	if d := t.dirs[name]; d != nil {
 		d.files = append(d.files, f)
 		return
 	}
-	d := &Dir{Path: name, files: Files{f}}
+	d := &Dir{path: name, files: Files{f}}
 	t.dirs[name] = d
-	for name != Root {
-		name = d.Dir()
+	for name != root {
+		name = d.dir()
 		if p := t.dirs[name]; p != nil {
 			p.dirs = append(p.dirs, d)
 			break
 		}
-		d = &Dir{Path: name, dirs: Dirs{d}}
+		d = &Dir{path: name, dirs: Dirs{d}}
 		t.dirs[name] = d
 	}
 }
 
 // file returns the specified file, if it exists.
-func (t *Tree) file(p Path) *File {
-	d := t.dirs[p.Dir()]
+func (t *Tree) file(p path) *File {
+	d := t.dirs[p.dir()]
 	if d == nil || p.isDir() {
 		return nil
 	}
-	base := p.Base()
+	base := p.base()
 	i, ok := slices.BinarySearchFunc(d.files, base, func(f *File, base string) int {
-		return cmp.Compare(f.Base(), base)
+		return cmp.Compare(f.base(), base)
 	})
 	if ok {
 		return d.files[i]

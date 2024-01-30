@@ -128,7 +128,7 @@ func read(src io.Reader) (*Index, error) {
 
 			// Path and modification time
 			p, ln, _ := bytes.Cut(ln, []byte("\t//"))
-			f := &File{Path: strictFilePath(string(p)), flag: flag}
+			f := &File{path: strictFilePath(string(p)), flag: flag}
 			if len(ln) > 0 {
 				if err := f.modTime.UnmarshalText(bytes.TrimLeft(ln, "\t")); err != nil {
 					return nil, fmt.Errorf("index: invalid modification time on line %d", line)
@@ -328,7 +328,7 @@ func groupByDigest(all Files) []Files {
 		if !ok {
 			g.i = i
 		} else if g.f[0].size != f.size {
-			panic(fmt.Sprintf("index: digest collision: %q != %q", g.f[0].Path, f.Path))
+			panic(fmt.Sprintf("index: digest collision: %q != %q", g.f[0].path, f.path))
 		}
 		g.f = append(g.f, f)
 		idx[f.digest] = g

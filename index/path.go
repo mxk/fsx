@@ -3,134 +3,134 @@ package index
 import (
 	"cmp"
 	"fmt"
-	"path"
+	stdpath "path"
 	"path/filepath"
 	"strings"
 )
 
-// Path is a non-empty, unrooted, clean, slash-separated path. Except for the
-// special "." root, the path ends in a '/' if it refers to a directory.
-type Path struct{ p string }
+// path is an unrooted, clean, slash-separated path. An empty path is invalid.
+// Except for the special "." root, a directory path always ends with a '/'.
+type path struct{ p string }
 
-// Root is the special "." path.
-var Root = Path{"."}
+// root is the special "." path.
+var root = path{"."}
 
-// dirPath creates a directory Path. It panics if the path is invalid.
-func dirPath(p string) Path {
+// dirPath creates a directory path. It panics if the path is invalid.
+func dirPath(p string) path {
 	if c := cleanPath(p); c != "" {
 		if c != "." && c[len(c)-1] != '/' {
 			c += "/"
 		}
-		return Path{c}
+		return path{c}
 	}
 	panic(fmt.Sprint("index: invalid path: ", p))
 }
 
-// filePath creates a file Path. It panics if the path is invalid.
-func filePath(p string) Path {
-	if c := (Path{cleanPath(p)}); c.isFile() {
+// filePath creates a file path. It panics if the path is invalid.
+func filePath(p string) path {
+	if c := (path{cleanPath(p)}); c.isFile() {
 		return c
 	}
 	panic(fmt.Sprint("index: invalid or non-file path: ", p))
 }
 
-// strictFilePath creates a file Path. It panics if the path is not identical to
+// strictFilePath creates a file path. It panics if the path is not identical to
 // that returned by filePath.
-func strictFilePath(p string) Path {
+func strictFilePath(p string) path {
 	if p == filePath(p).p {
-		return Path{p}
+		return path{p}
 	}
 	panic(fmt.Sprint("index: non-clean file path: ", p))
 }
 
 // anyPath returns the directory and/or file interpretations of path p,
 // depending on which one is possible.
-func anyPath(p string) (dir, file Path) {
+func anyPath(p string) (dir, file path) {
 	if p = cleanPath(p); p != "" {
 		if p == "." || p[len(p)-1] == '/' {
-			dir = Path{p}
+			dir = path{p}
 		} else {
 			p += "/"
-			dir, file = Path{p}, Path{p[:len(p)-1]}
+			dir, file = path{p}, path{p[:len(p)-1]}
 		}
 	}
 	return
 }
 
 // String returns the raw path.
-func (p Path) String() string { return p.p }
+func (p path) String() string { return p.p }
 
-// Contains returns whether other is under the directory tree p. It returns true
+// contains returns whether other is under the directory tree p. It returns true
 // if the paths are equal (same directory) or if p is ".".
-func (p Path) Contains(other Path) bool {
+func (p path) contains(other path) bool {
 	return p.p == "." || (0 < len(p.p) && len(p.p) <= len(other.p) &&
 		other.p[:len(p.p)] == p.p && p.p[len(p.p)-1] == '/')
 }
 
 // Dir returns the parent directory of p.
-func (p Path) Dir() Path {
+func (p path) dir() path {
 	i := strings.LastIndexByte(p.p[:len(p.p)-1], '/')
 	if i > 0 {
-		return Path{p.p[:i+1]}
+		return path{p.p[:i+1]}
 	}
 	if i < 0 {
 		if p.isEmpty() {
-			return Path{}
+			return path{}
 		}
-		return Root
+		return root
 	}
 	panic(fmt.Sprint("index: rooted path: ", p))
 }
 
-// Base returns the last element of p.
-func (p Path) Base() string {
+// base returns the last element of p.
+func (p path) base() string {
 	if p.isEmpty() {
 		return ""
 	}
-	return path.Base(p.p)
+	return stdpath.Base(p.p)
 }
 
-// CommonRoot returns the path that is a parent of both p and other.
-func (p Path) CommonRoot(other Path) Path {
+// commonRoot returns the path that is a parent of both p and other.
+func (p path) commonRoot(other path) path {
 	a, b := p.p, other.p
 	for {
 		i := strings.IndexByte(a, '/')
 		if i < 0 || i != strings.IndexByte(b, '/') || a[:i] != b[:i] {
 			if s := p.p[:len(p.p)-len(a)]; s != "" {
-				return Path{s}
+				return path{s}
 			}
-			return Root
+			return root
 		}
 		a, b = a[i+1:], b[i+1:]
 	}
 }
 
-// Dist returns the distance between two paths in terms of directories traversed
+// dist returns the distance between two paths in terms of directories traversed
 // to go from one to the other.
-func (p Path) Dist(other Path) int {
-	if r := p.CommonRoot(other); r != Root {
+func (p path) dist(other path) int {
+	if r := p.commonRoot(other); r != root {
 		p.p, other.p = p.p[len(r.p):], other.p[len(r.p):]
 	}
 	return strings.Count(p.p, "/") + strings.Count(other.p, "/")
 }
 
 // isEmpty returns whether p is an invalid empty path.
-func (p Path) isEmpty() bool { return len(p.p) == 0 }
+func (p path) isEmpty() bool { return len(p.p) == 0 }
 
 // isDir returns whether the path refers to a directory.
-func (p Path) isDir() bool {
+func (p path) isDir() bool {
 	return 0 < len(p.p) && (p.p == "." || p.p[len(p.p)-1] == '/')
 }
 
 // isFile returns whether the path refers to a file.
-func (p Path) isFile() bool {
+func (p path) isFile() bool {
 	return 0 < len(p.p) && p.p != "." && p.p[len(p.p)-1] != '/'
 }
 
 // cmp returns -1 if p < other, 0 if p == other, and +1 if p > other.
-// Directories are considered less than files. It panics if either Path is empty
+// Directories are considered less than files. It panics if either path is empty
 // or if the same name refers to both a file and a directory.
-func (p Path) cmp(other Path) int {
+func (p path) cmp(other path) int {
 	lessIf := func(b bool) int {
 		if b {
 			return -1
@@ -190,29 +190,29 @@ func (p Path) cmp(other Path) int {
 	return lessIf((a[len(a)-1] == '/' || bSep < 0) != invert)
 }
 
-// steps iterates over every step in a Path.
+// steps iterates over every step in a path.
 type steps struct {
-	Path
+	path
 	n int
 }
 
-// next returns the next step in s or (Path{}, false) if the last step was
+// next returns the next step in s or (path{}, false) if the last step was
 // reached. It does not return the root directory.
-func (s *steps) next() (Path, bool) {
-	if s.n >= len(s.p) || s.Path == Root {
-		return Path{}, false
+func (s *steps) next() (path, bool) {
+	if s.n >= len(s.p) || s.path == root {
+		return path{}, false
 	}
 	if i := strings.IndexByte(s.p[s.n:], '/'); i > 0 {
 		s.n += i + 1
 	} else if s.n = len(s.p); i == 0 {
 		panic(fmt.Sprint("index: rooted or non-clean path: ", s)) // Shouldn't happen
 	}
-	return Path{s.p[:s.n]}, true
+	return path{s.p[:s.n]}, true
 }
 
 // skip causes next to return the step after p if p is a parent of the final
-// path (p.Contains(s.Path) == true) and hasn't been returned yet.
-func (s *steps) skip(p Path) {
+// path (p.contains(s.path) == true) and hasn't been returned yet.
+func (s *steps) skip(p path) {
 	if s.n < len(p.p) && len(p.p) <= len(s.p) &&
 		s.p[:len(p.p)] == p.p && p.p[len(p.p)-1] == '/' {
 		s.n = len(p.p)
@@ -223,18 +223,18 @@ func (s *steps) skip(p Path) {
 type uniqueDirs []steps
 
 // add adds path p to the set.
-func (u *uniqueDirs) add(p Path) { *u = append(*u, steps{Path: p}) }
+func (u *uniqueDirs) add(p path) { *u = append(*u, steps{path: p}) }
 
 // clear removes all paths from the set.
 func (u *uniqueDirs) clear() { *u = (*u)[:0] }
 
 // forEach calls fn for each unique directory in the set, leaving the set empty.
 // For example, if the set contains paths "A/B/", "A/C/", and "D/", fn will be
-// called for Root, "A/", "A/B/", "A/C/", and "D/".
-func (u *uniqueDirs) forEach(fn func(Path)) {
+// called for ".", "A/", "A/B/", "A/C/", and "D/".
+func (u *uniqueDirs) forEach(fn func(path)) {
 	defer u.clear()
 	if len(*u) > 0 {
-		fn(Root)
+		fn(root)
 	}
 	for len(*u) > 0 {
 		if p, ok := (*u)[0].next(); ok {
@@ -258,13 +258,13 @@ func cleanPath(p string) string {
 	// path.Clean is more efficient than filepath.Clean and we want to return ""
 	// for cases handled by filepath.postClean.
 	p = filepath.ToSlash(p)
-	c := path.Clean(p)
-	if path.IsAbs(c) || (len(c) >= 2 && (c[1] == ':' || c[:2] == "..")) {
+	c := stdpath.Clean(p)
+	if stdpath.IsAbs(c) || (len(c) >= 2 && (c[1] == ':' || c[:2] == "..")) {
 		return ""
 	}
 	// Preserve the trailing '/' and pointer values, if possible
 	if c == "." {
-		c = Root.p
+		c = root.p
 	} else if p[len(p)-1] == '/' {
 		if len(p) == len(c)+1 && p[:len(c)] == c {
 			c = p

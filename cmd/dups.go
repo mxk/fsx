@@ -25,11 +25,11 @@ func (cmd *dupCmd) Main(args []string) error {
 		return err
 	}
 	t := x.ToTree()
-	dups := t.Dups(index.Root, 0, 10)
+	dups := t.Dups(".", 0, 10)
 	for _, dup := range dups {
-		fmt.Println(dup.Dir.Path)
-		for _, mir := range dup.Alt {
-			fmt.Printf("\t%s\n", mir.Path)
+		fmt.Println(dup.Dir)
+		for _, alt := range dup.Alt {
+			fmt.Printf("\t%s\n", alt)
 		}
 	}
 	return nil
