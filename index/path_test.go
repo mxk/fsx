@@ -241,6 +241,8 @@ func TestUniqueDirs(t *testing.T) {
 
 	var u uniqueDirs
 	u.forEach(func(path) { panic("fail") })
+	assert.Panics(t, func() { u.add("") })
+	assert.Panics(t, func() { u.add("a") })
 
 	u.add("A/")
 	u.forEach(fn)

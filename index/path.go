@@ -228,8 +228,13 @@ func (s *steps) skip(p path) {
 // uniqueDirs visits all unique directories in a set of paths.
 type uniqueDirs []steps
 
-// add adds path p to the set.
-func (u *uniqueDirs) add(p path) { *u = append(*u, steps{p: p}) }
+// add adds path p to the set. It panics if p is not a directory.
+func (u *uniqueDirs) add(p path) {
+	if !p.isDir() {
+		panic(fmt.Sprint("index: not a directory: ", p))
+	}
+	*u = append(*u, steps{p: p})
+}
 
 // clear removes all paths from the set.
 func (u *uniqueDirs) clear() { *u = (*u)[:0] }
@@ -238,18 +243,19 @@ func (u *uniqueDirs) clear() { *u = (*u)[:0] }
 // For example, if the set contains paths "A/B/", "A/C/", and "D/", fn will be
 // called for ".", "A/", "A/B/", "A/C/", and "D/".
 func (u *uniqueDirs) forEach(fn func(path)) {
-	defer u.clear()
-	if len(*u) > 0 {
-		fn(".")
+	if len(*u) == 0 {
+		return
 	}
-	for len(*u) > 0 {
-		if p := (*u)[0].next(); p != "" {
+	defer u.clear()
+	fn(".")
+	for i := 0; i < len(*u); {
+		if p := (*u)[i].next(); p != "" {
 			fn(p)
-			for i := 1; i < len(*u); i++ {
-				(*u)[i].skip(p)
+			for j := i + 1; j < len(*u); j++ {
+				(*u)[j].skip(p)
 			}
 		} else {
-			*u = append((*u)[:0], (*u)[1:]...)
+			i++
 		}
 	}
 }
