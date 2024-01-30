@@ -12,16 +12,16 @@ import (
 func TestToTree(t *testing.T) {
 	d1, d2, d3, d4, d5 := Digest{1}, Digest{2}, Digest{3}, Digest{4}, Digest{5}
 
-	a1 := &File{digest: d1, path: path{"a1"}}
-	a2 := &File{digest: d1, path: path{"A/a2"}}
-	a3 := &File{digest: d1, path: path{"A/B/a3"}}
-	b1 := &File{digest: d2, path: path{"A/b1"}}
-	b2 := &File{digest: d2, path: path{"C/D/E/b2"}}
-	c1 := &File{digest: d3, path: path{"C/c1"}}
-	c2 := &File{digest: d3, path: path{"C/F/c2"}}
-	x1 := &File{digest: d4, path: path{"C/.git/X/x1"}}
-	y1 := &File{digest: d5, path: path{"C/.git/X/.git/Z/y1"}}
-	yX := &File{digest: d5, path: path{"C/.git/X/.git/Z/y1"}, flag: flagGone}
+	a1 := &File{digest: d1, path: "a1"}
+	a2 := &File{digest: d1, path: "A/a2"}
+	a3 := &File{digest: d1, path: "A/B/a3"}
+	b1 := &File{digest: d2, path: "A/b1"}
+	b2 := &File{digest: d2, path: "C/D/E/b2"}
+	c1 := &File{digest: d3, path: "C/c1"}
+	c2 := &File{digest: d3, path: "C/F/c2"}
+	x1 := &File{digest: d4, path: "C/.git/X/x1"}
+	y1 := &File{digest: d5, path: "C/.git/X/.git/Z/y1"}
+	yX := &File{digest: d5, path: "C/.git/X/.git/Z/y1", flag: flagGone}
 
 	x := Index{
 		root:   "/",
@@ -29,20 +29,20 @@ func TestToTree(t *testing.T) {
 	}
 
 	Z := &Dir{
-		path:        path{"C/.git/X/.git/Z/"},
+		path:        "C/.git/X/.git/Z/",
 		files:       Files{y1},
 		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
 	GIT2 := &Dir{
-		path:        path{"C/.git/X/.git/"},
+		path:        "C/.git/X/.git/",
 		dirs:        Dirs{Z},
 		totalDirs:   1,
 		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
 	X := &Dir{
-		path:        path{"C/.git/X/"},
+		path:        "C/.git/X/",
 		dirs:        Dirs{GIT2},
 		files:       Files{x1},
 		totalDirs:   2,
@@ -50,7 +50,7 @@ func TestToTree(t *testing.T) {
 		uniqueFiles: 2, // x1, y1
 	}
 	GIT1 := &Dir{
-		path:        path{"C/.git/"},
+		path:        "C/.git/",
 		dirs:        Dirs{X},
 		totalDirs:   3,
 		totalFiles:  2,
@@ -62,26 +62,26 @@ func TestToTree(t *testing.T) {
 	Z.atom = GIT1
 
 	F := &Dir{
-		path:        path{"C/F/"},
+		path:        "C/F/",
 		files:       Files{c2},
 		totalFiles:  1,
 		uniqueFiles: 1, // c2
 	}
 	E := &Dir{
-		path:        path{"C/D/E/"},
+		path:        "C/D/E/",
 		files:       Files{b2},
 		totalFiles:  1,
 		uniqueFiles: 1, // b2
 	}
 	D := &Dir{
-		path:        path{"C/D/"},
+		path:        "C/D/",
 		dirs:        Dirs{E},
 		totalDirs:   1,
 		totalFiles:  1,
 		uniqueFiles: 1, // b2,
 	}
 	C := &Dir{
-		path:        path{"C/"},
+		path:        "C/",
 		dirs:        Dirs{GIT1, D, F},
 		files:       Files{c1},
 		totalDirs:   7,
@@ -89,13 +89,13 @@ func TestToTree(t *testing.T) {
 		uniqueFiles: 4, // b2, c[12], x1, y1
 	}
 	B := &Dir{
-		path:        path{"A/B/"},
+		path:        "A/B/",
 		files:       Files{a3},
 		totalFiles:  1,
 		uniqueFiles: 1, // a3
 	}
 	A := &Dir{
-		path:        path{"A/"},
+		path:        "A/",
 		dirs:        Dirs{B},
 		files:       Files{a2, b1},
 		totalDirs:   1,
@@ -103,7 +103,7 @@ func TestToTree(t *testing.T) {
 		uniqueFiles: 2, // a[23], b1
 	}
 	R := &Dir{
-		path:        root,
+		path:        ".",
 		dirs:        Dirs{A, C},
 		files:       Files{a1},
 		totalDirs:   10,
@@ -114,7 +114,7 @@ func TestToTree(t *testing.T) {
 	want := &Tree{
 		root: x.root,
 		dirs: map[path]*Dir{
-			root:      R,
+			R.path:    R,
 			A.path:    A,
 			B.path:    B,
 			C.path:    C,
@@ -142,13 +142,13 @@ func TestToTree(t *testing.T) {
 }
 
 func TestEmptyTree(t *testing.T) {
-	want := &Tree{root: "/", dirs: map[path]*Dir{root: {path: root}}}
+	want := &Tree{root: "/", dirs: map[path]*Dir{".": {path: "."}}}
 	require.Equal(t, want, (&Index{root: "/"}).ToTree())
 	require.Equal(t, &Index{root: "/"}, want.ToIndex())
 
 	d1 := Digest{1}
 	x := &Index{root: "/", groups: []Files{{
-		{path{"x"}, d1, 1, time.Time{}, flagDup | flagGone},
+		{"x", d1, 1, time.Time{}, flagDup | flagGone},
 	}}}
 	want.idx = map[Digest]Files{d1: x.groups[0]}
 	require.Equal(t, want, x.ToTree())
@@ -163,7 +163,7 @@ func TestToIndex(t *testing.T) {
 
 func TestDups(t *testing.T) {
 	d1, d2, d3 := Digest{1}, Digest{2}, Digest{3}
-	file := func(d Digest, p string) *File { return &File{digest: d, size: 1, path: path{p}} }
+	file := func(d Digest, p path) *File { return &File{digest: d, size: 1, path: p} }
 
 	a0, a1 := file(d1, "A/a0"), file(d1, "B/a1")
 	b0, b1 := file(d2, "A/b0"), file(d2, "B/b1")
@@ -173,12 +173,12 @@ func TestDups(t *testing.T) {
 	x := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
 	tr := x.ToTree()
 	want := []*Dup{{
-		Dir:  tr.dirs[path{"A/"}],
-		Alt:  Dirs{tr.dirs[path{"B/"}]},
+		Dir:  tr.dirs["A/"],
+		Alt:  Dirs{tr.dirs["B/"]},
 		Lost: Files{c0},
 	}, {
-		Dir: tr.dirs[path{"B/"}],
-		Alt: Dirs{tr.dirs[path{"A/"}]},
+		Dir: tr.dirs["B/"],
+		Alt: Dirs{tr.dirs["A/"]},
 	}}
 	require.Equal(t, want, tr.Dups(".", -1, 1))
 

@@ -144,7 +144,8 @@ func (w *walker) walk(cp ctxPoller, t *Tree, mon func(int) error) {
 		}
 		if e.Type().IsRegular() {
 			if t != nil {
-				if f := t.file(path{name}); f != nil && f.isSame(e.Info()) {
+				// TODO: Does name need to go through filePath?
+				if f := t.file(path(name)); f != nil && f.isSame(e.Info()) {
 					f.flag = f.flag&^flagGone | flagSame
 					w.file <- f
 					return nil

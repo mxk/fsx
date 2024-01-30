@@ -28,24 +28,31 @@ func TestStrictFilePath(t *testing.T) {
 }
 
 func TestPathContains(t *testing.T) {
-	assert.True(t, root.contains(root))
-	assert.True(t, root.contains(path{"a"}))
-	assert.True(t, root.contains(path{"a/"}))
-	assert.False(t, path{}.contains(root))
-	assert.False(t, path{}.contains(path{"a"}))
-	assert.False(t, path{"a"}.contains(path{"a"}))
-	assert.False(t, path{"a/a"}.contains(path{"a/a"}))
-	assert.False(t, path{"a/"}.contains(root))
-	assert.False(t, path{"a/"}.contains(path{"a"}))
-	assert.False(t, path{"a/"}.contains(path{"b"}))
-	assert.False(t, path{"a/"}.contains(path{"b/"}))
-	assert.False(t, path{"a/b"}.contains(path{"a/"}))
-	assert.True(t, path{"a/"}.contains(path{"a/"}))
-	assert.True(t, path{"a/"}.contains(path{"a/b"}))
+	assert.False(t, path("").contains(""))
+	assert.False(t, path("").contains("."))
+	assert.False(t, path("").contains("a"))
+
+	assert.True(t, path(".").contains("."))
+	assert.True(t, path(".").contains("a"))
+	assert.True(t, path(".").contains("a/"))
+
+	assert.False(t, path("a").contains("a"))
+	assert.False(t, path("a/a").contains("a/a"))
+	assert.False(t, path("a/").contains("."))
+	assert.False(t, path("a/").contains("a"))
+	assert.False(t, path("a/").contains("b"))
+	assert.False(t, path("a/").contains("b/"))
+	assert.False(t, path("a/b").contains("a/"))
+
+	assert.True(t, path("a/").contains("a/"))
+	assert.True(t, path("a/").contains("a/b"))
 }
 
 func TestPathDirBase(t *testing.T) {
-	tests := []struct{ p, dir, base string }{
+	tests := []struct {
+		p, dir path
+		base   string
+	}{
 		{".", ".", "."},
 		{"a", ".", "a"},
 		{"a/", ".", "a"},
@@ -55,16 +62,14 @@ func TestPathDirBase(t *testing.T) {
 		{"a/bc/de/", "a/bc/", "de"},
 	}
 	for _, tc := range tests {
-		assert.Equal(t, path{tc.dir}, path{tc.p}.dir(), "%q", tc)
-		assert.Equal(t, tc.base, path{tc.p}.base(), "%q", tc)
+		assert.Equal(t, tc.dir, tc.p.dir(), "%q", tc)
+		assert.Equal(t, tc.base, tc.p.base(), "%q", tc)
 	}
-	assert.Panics(t, func() { path{"/a"}.dir() })
+	assert.Panics(t, func() { path("/a").dir() })
 }
 
 func TestPathCommonRoot(t *testing.T) {
-	tests := []struct {
-		a, b, root string
-	}{
+	tests := []struct{ a, b, root path }{
 		{".", ".", "."},
 		{"a/", ".", "."},
 		{"a/", "a/", "a/"},
@@ -78,14 +83,16 @@ func TestPathCommonRoot(t *testing.T) {
 		{"a/b/c/", "a/b/d/", "a/b/"},
 	}
 	for _, tc := range tests {
-		assert.Equal(t, path{tc.root}, path{tc.a}.commonRoot(path{tc.b}), "%q", tc)
-		assert.Equal(t, path{tc.root}, path{tc.b}.commonRoot(path{tc.a}), "%q", tc)
+		assert.Equal(t, tc.root, tc.a.commonRoot(tc.b), "%q", tc)
+		assert.Equal(t, tc.root, tc.b.commonRoot(tc.a), "%q", tc)
 	}
+	assert.Panics(t, func() { path("").commonRoot("") })
+	assert.Panics(t, func() { path("").commonRoot(".") })
 }
 
 func TestPathDist(t *testing.T) {
 	tests := []struct {
-		a, b string
+		a, b path
 		dist int
 	}{
 		{".", ".", 0},
@@ -102,27 +109,27 @@ func TestPathDist(t *testing.T) {
 		{"a/b/c/", "a/b/d/", 2},
 	}
 	for _, tc := range tests {
-		assert.Equal(t, tc.dist, path{tc.a}.dist(path{tc.b}), "%q", tc)
-		assert.Equal(t, tc.dist, path{tc.b}.dist(path{tc.a}), "%q", tc)
+		assert.Equal(t, tc.dist, tc.a.dist(tc.b), "%q", tc)
+		assert.Equal(t, tc.dist, tc.b.dist(tc.a), "%q", tc)
 	}
 }
 
 func TestPathIsDir(t *testing.T) {
-	assert.False(t, path{}.isDir())
-	assert.True(t, root.isDir())
-	assert.False(t, path{"a"}.isDir())
-	assert.True(t, path{"a/"}.isDir())
+	assert.False(t, path("").isDir())
+	assert.True(t, path(".").isDir())
+	assert.False(t, path("a").isDir())
+	assert.True(t, path("a/").isDir())
 }
 
 func TestPathIsFile(t *testing.T) {
-	assert.False(t, path{}.isFile())
-	assert.False(t, root.isFile())
-	assert.True(t, path{"a"}.isFile())
-	assert.False(t, path{"a/"}.isFile())
+	assert.False(t, path("").isFile())
+	assert.False(t, path(".").isFile())
+	assert.True(t, path("a").isFile())
+	assert.False(t, path("a/").isFile())
 }
 
 func TestPathCmp(t *testing.T) {
-	less := []struct{ a, b string }{
+	less := []struct{ a, b path }{
 		{".", "!"},
 		{".", "a/b"},
 		{"a", "b"},
@@ -142,10 +149,10 @@ func TestPathCmp(t *testing.T) {
 		{"a/ab/", "a/a"},
 	}
 	for _, tc := range less {
-		assert.Equal(t, -1, path{tc.a}.cmp(path{tc.b}), "%q", tc)
-		assert.Equal(t, 1, path{tc.b}.cmp(path{tc.a}), "%q", tc)
+		assert.Equal(t, -1, tc.a.cmp(tc.b), "%q", tc)
+		assert.Equal(t, 1, tc.b.cmp(tc.a), "%q", tc)
 	}
-	panics := []struct{ a, b string }{
+	panics := []struct{ a, b path }{
 		{"", "."},
 		{"", "a"},
 		{"a/", "a"},
@@ -153,76 +160,70 @@ func TestPathCmp(t *testing.T) {
 		{"a/b/c", "a/b"},
 	}
 	for _, tc := range panics {
-		assert.Panics(t, func() { path{tc.a}.cmp(path{tc.b}) }, "%q", tc)
-		assert.Panics(t, func() { path{tc.b}.cmp(path{tc.a}) }, "%q", tc)
+		assert.Panics(t, func() { tc.a.cmp(tc.b) }, "%q", tc)
+		assert.Panics(t, func() { tc.b.cmp(tc.a) }, "%q", tc)
 	}
-	assert.Zero(t, root.cmp(root))
-	assert.Zero(t, path{"a"}.cmp(path{"a"}))
-	assert.Zero(t, path{"a/"}.cmp(path{"a/"}))
-	assert.Zero(t, path{"a/b"}.cmp(path{"a/b"}))
+	assert.Zero(t, path(".").cmp("."))
+	assert.Zero(t, path("a").cmp("a"))
+	assert.Zero(t, path("a/").cmp("a/"))
+	assert.Zero(t, path("a/b").cmp("a/b"))
 }
 
 func TestSteps(t *testing.T) {
 	tests := []struct {
-		path string
-		skip string
-		want []string
+		path path
+		skip path
+		want []path
 	}{
 		// next
 		{"", "", nil},
 		{".", "", nil},
-		{"a", "", []string{"a"}},
-		{"a/", "", []string{"a/"}},
-		{"a/b", "", []string{"a/", "a/b"}},
-		{"a/bc/", "", []string{"a/", "a/bc/"}},
-		{"a/bc/def/ghi", "", []string{"a/", "a/bc/", "a/bc/def/", "a/bc/def/ghi"}},
+		{"a", "", []path{"a"}},
+		{"a/", "", []path{"a/"}},
+		{"a/b", "", []path{"a/", "a/b"}},
+		{"a/bc/", "", []path{"a/", "a/bc/"}},
+		{"a/bc/def/ghi", "", []path{"a/", "a/bc/", "a/bc/def/", "a/bc/def/ghi"}},
 
 		// skip
-		{"a", "a", []string{"a"}},
-		{"a", "a/", []string{"a"}},
-		{"a/b/c", "x/", []string{"a/", "a/b/", "a/b/c"}},
-		{"a/b/c", "a/", []string{"a/b/", "a/b/c"}},
-		{"a/b/c", "a/b", []string{"a/", "a/b/", "a/b/c"}},
-		{"a/b/c/", "a/b/", []string{"a/b/c/"}},
+		{"a", "a", []path{"a"}},
+		{"a", "a/", []path{"a"}},
+		{"a/b/c", "x/", []path{"a/", "a/b/", "a/b/c"}},
+		{"a/b/c", "a/", []path{"a/b/", "a/b/c"}},
+		{"a/b/c", "a/b", []path{"a/", "a/b/", "a/b/c"}},
+		{"a/b/c/", "a/b/", []path{"a/b/c/"}},
 		{"a/b/c/", "a/b/c/", nil},
 	}
 	for _, tc := range tests {
-		s := steps{path: path{tc.path}}
+		s := steps{p: tc.path}
 		if tc.skip != "" {
-			s.skip(path{tc.skip})
+			s.skip(tc.skip)
 		}
-		var have []string
-		for p, ok := s.next(); ok; p, ok = s.next() {
-			have = append(have, p.p)
+		var have []path
+		for p := s.next(); p != ""; p = s.next() {
+			have = append(have, p)
 		}
 		assert.Equal(t, tc.want, have, "%q", tc)
 	}
 	for i := range [3]struct{}{} {
-		s := steps{path: path{"a/b/c/d/"}}
-		if p, ok := s.next(); assert.True(t, ok) {
-			assert.Equal(t, path{"a/"}, p)
-		}
+		s := steps{p: "a/b/c/d/"}
+		assert.Equal(t, path("a/"), s.next())
 		switch i {
 		case 0:
-			s.skip(path{"a/b/c/"})
+			s.skip("a/b/c/")
 		case 1:
-			s.skip(path{"a/b/"})
-			s.skip(path{"a/b/c/"})
+			s.skip("a/b/")
+			s.skip("a/b/c/")
 		case 2:
-			s.skip(path{"a/b/c/"})
-			s.skip(path{"a/b/c/d/e/"})
-			s.skip(path{"a/b/"})
+			s.skip("a/b/c/")
+			s.skip("a/b/c/d/e/")
+			s.skip("a/b/")
 		}
-		if p, ok := s.next(); assert.True(t, ok, "%v", i) {
-			assert.Equal(t, path{"a/b/c/d/"}, p, "%v", i)
-		}
+		assert.Equal(t, path("a/b/c/d/"), s.next(), "%v", i)
 	}
-	assert.Panics(t, func() { (&steps{path: path{"/a"}}).next() })
+	assert.Panics(t, func() { (&steps{p: "/a"}).next() })
 	assert.Panics(t, func() {
-		s := steps{path: path{"a//b"}}
-		if p, ok := s.next(); assert.True(t, ok) {
-			assert.Equal(t, path{"a/"}, p)
-		}
+		s := steps{p: "a//b"}
+		assert.Equal(t, path("a/"), s.next())
 		s.next()
 	})
 }
@@ -234,32 +235,32 @@ func TestUniqueDirs(t *testing.T) {
 	var u uniqueDirs
 	u.forEach(func(path) { panic("fail") })
 
-	u.add(dirPath("A/"))
+	u.add("A/")
 	u.forEach(fn)
-	require.Equal(t, []path{root, {"A/"}}, have)
+	require.Equal(t, []path{".", "A/"}, have)
 	require.Empty(t, u)
 
-	u.add(dirPath("A/"))
-	u.add(dirPath("X/Y/Z/"))
-	u.add(dirPath("A/B/C/D/"))
-	u.add(dirPath("A/B/C/"))
-	u.add(dirPath("X/Z/"))
-	u.add(root)
-	u.add(dirPath("A/B/"))
-	u.add(dirPath("A/B/E/"))
-	u.add(dirPath("A/B/C/D/"))
+	u.add("A/")
+	u.add("X/Y/Z/")
+	u.add("A/B/C/D/")
+	u.add("A/B/C/")
+	u.add("X/Z/")
+	u.add(".")
+	u.add("A/B/")
+	u.add("A/B/E/")
+	u.add("A/B/C/D/")
 
 	want := []path{
-		root,
-		{"A/"},
-		{"X/"},
-		{"X/Y/"},
-		{"X/Y/Z/"},
-		{"A/B/"},
-		{"A/B/C/"},
-		{"A/B/C/D/"},
-		{"X/Z/"},
-		{"A/B/E/"},
+		".",
+		"A/",
+		"X/",
+		"X/Y/",
+		"X/Y/Z/",
+		"A/B/",
+		"A/B/C/",
+		"A/B/C/D/",
+		"X/Z/",
+		"A/B/E/",
 	}
 	have = have[:0]
 	u.forEach(fn)
@@ -268,7 +269,10 @@ func TestUniqueDirs(t *testing.T) {
 }
 
 func TestCleanPath(t *testing.T) {
-	tests := []struct{ have, want string }{
+	tests := []struct {
+		have string
+		want path
+	}{
 		{"", ""},
 		{"/", ""},
 		{`\\`, ""},
@@ -285,8 +289,8 @@ func TestCleanPath(t *testing.T) {
 
 	// Do not reallocate clean paths
 	for _, tc := range []string{".", "a", "a/", "a/b", "a/b/"} {
-		if p := cleanPath(tc); assert.Equal(t, tc, p) {
-			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(p))
+		if p := cleanPath(tc); assert.Equal(t, tc, string(p)) {
+			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(string(p)))
 		}
 	}
 }

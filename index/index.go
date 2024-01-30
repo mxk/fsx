@@ -239,7 +239,7 @@ func (x *Index) write(dst io.Writer) error {
 		for _, f := range g {
 			if f.flag.write() {
 				empty = false
-				n := tabWidth + width(f.p)&^(tabWidth-1) + 2*tabWidth
+				n := tabWidth + width(string(f.path))&^(tabWidth-1) + 2*tabWidth
 				align, lineWidth = max(align, n), append(lineWidth, n)
 			} else {
 				lineWidth = append(lineWidth, 0)
@@ -259,7 +259,7 @@ func (x *Index) write(dst io.Writer) error {
 			}
 			_, _ = w.WriteString(f.flag.String())
 			_ = w.WriteByte('\t')
-			_, _ = w.WriteString(f.p)
+			_, _ = w.WriteString(string(f.path))
 			if i == 0 || !f.modTime.Equal(g[i-1].modTime) {
 				_, _ = w.WriteString("\t//\t")
 				n := (align - lineWidth[i]) / tabWidth
@@ -268,7 +268,7 @@ func (x *Index) write(dst io.Writer) error {
 					b[i] = '\t'
 				}
 				_, _ = w.Write(f.modTime.AppendFormat(b, time.RFC3339Nano))
-			} else if strings.TrimRight(f.p, "\t\n\v\f\r ") != f.p {
+			} else if p := string(f.path); strings.TrimRight(p, "\t\n\v\f\r ") != p {
 				_, _ = w.WriteString("\t//")
 			}
 			_ = w.WriteByte('\n')

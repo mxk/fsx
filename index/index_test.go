@@ -31,19 +31,19 @@ func TestIndexReadWrite(t *testing.T) {
 	want := &Index{
 		root: "/",
 		groups: []Files{{
-			{path{"d1/a"}, d1, 1, t0, flagKeep},
-			{path{"d2/a"}, d1, 1, t0, flagNone},
-			{path{"a"}, d1, 1, t0, flagNone},
+			{"d1/a", d1, 1, t0, flagKeep},
+			{"d2/a", d1, 1, t0, flagNone},
+			{"a", d1, 1, t0, flagNone},
 		}, {
-			{path{"b"}, d2, 2, t1, flagNone},
-			{path{"gone1"}, d2, 2, t1, flagGone},
+			{"b", d2, 2, t1, flagNone},
+			{"gone1", d2, 2, t1, flagGone},
 		}, {
-			{path{"gone2"}, d2, 2, t1, flagGone},
+			{"gone2", d2, 2, t1, flagGone},
 		}, {
-			{path{"c"}, d3, 3, t0, flagNone},
-			{path{"d\t"}, d3, 3, t0, flagDup},
-			{path{"e \t"}, d3, 3, t1, flagDup | flagGone},
-			{path{"f"}, d3, 3, t1, flagNone},
+			{"c", d3, 3, t0, flagNone},
+			{"d\t", d3, 3, t0, flagDup},
+			{"e \t", d3, 3, t1, flagDup | flagGone},
+			{"f", d3, 3, t1, flagNone},
 		}},
 	}
 

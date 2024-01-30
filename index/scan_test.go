@@ -30,12 +30,12 @@ func TestScan(t *testing.T) {
 	require.NoError(t, err)
 	want := &Index{groups: []Files{
 		{
-			{path{"X/a"}, d1, 1, t1, flagNone},
-			{path{"Y/c"}, d1, 1, t2, flagNone},
+			{"X/a", d1, 1, t1, flagNone},
+			{"Y/c", d1, 1, t2, flagNone},
 		}, {
-			{path{"X/b"}, d2, 2, t2, flagNone},
+			{"X/b", d2, 2, t2, flagNone},
 		}, {
-			{path{"d"}, d3, 3, t1, flagNone},
+			{"d", d3, 3, t1, flagNone},
 		},
 	}}
 	require.Equal(t, want, x)
@@ -48,20 +48,20 @@ func TestScan(t *testing.T) {
 
 	// Rescan
 	tr := x.ToTree()
-	tr.file(path{"X/a"}).flag = flagJunk
-	tr.file(path{"X/b"}).flag = flagKeep
-	tr.file(path{"d"}).flag = flagDup
+	tr.file("X/a").flag = flagJunk
+	tr.file("X/b").flag = flagKeep
+	tr.file("d").flag = flagDup
 	x, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
 	want = &Index{groups: []Files{
 		{
-			{path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
-			{path{"e"}, d1, 1, t2, flagNone},
+			{"X/a", d1, 1, t1, flagJunk | flagGone},
+			{"e", d1, 1, t2, flagNone},
 		}, {
-			{path{"X/b"}, d3, 3, t2, flagNone},
-			{path{"d"}, d3, 3, t1, flagDup | flagSame},
+			{"X/b", d3, 3, t2, flagNone},
+			{"d", d3, 3, t1, flagDup | flagSame},
 		}, {
-			{path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
+			{"X/b", d2, 2, t2, flagKeep | flagGone},
 		},
 	}}
 	require.Equal(t, want, x)
@@ -72,32 +72,32 @@ func TestScan(t *testing.T) {
 
 	// Rescan
 	tr = x.ToTree()
-	tr.file(path{"e"}).flag |= flagDup | flagGone
+	tr.file("e").flag |= flagDup | flagGone
 	x, err = tr.Rescan(context.Background(), fsys, nil, nil)
 	require.NoError(t, err)
 	want = &Index{groups: []Files{
 		{
-			{path{"X/a"}, d1, 1, t1, flagJunk | flagGone},
-			{path{"e"}, d1, 1, t2, flagDup | flagSame},
+			{"X/a", d1, 1, t1, flagJunk | flagGone},
+			{"e", d1, 1, t2, flagDup | flagSame},
 		}, {
-			{path{"X/b"}, d2, 2, t2, flagNone},
-			{path{"X/b"}, d2, 2, t2, flagKeep | flagGone},
+			{"X/b", d2, 2, t2, flagNone},
+			{"X/b", d2, 2, t2, flagKeep | flagGone},
 		}, {
-			{path{"d"}, d3, 3, t2, flagNone},
-			{path{"d"}, d3, 3, t1, flagDup | flagGone},
+			{"d", d3, 3, t2, flagNone},
+			{"d", d3, 3, t1, flagDup | flagGone},
 		},
 	}}
 	require.Equal(t, want, x)
 
 	// Verify Tree structure
 	X := &Dir{
-		path:        path{"X/"},
+		path:        "X/",
 		files:       Files{x.groups[1][0]},
 		totalFiles:  1,
 		uniqueFiles: 1,
 	}
 	R := &Dir{
-		path:        root,
+		path:        ".",
 		dirs:        Dirs{X},
 		files:       Files{x.groups[2][0], x.groups[0][1]},
 		totalDirs:   1,
@@ -105,7 +105,7 @@ func TestScan(t *testing.T) {
 		uniqueFiles: 3,
 	}
 	wantTree := &Tree{
-		dirs: map[path]*Dir{root: R, X.path: X},
+		dirs: map[path]*Dir{R.path: R, X.path: X},
 		idx: map[Digest]Files{
 			d1: want.groups[0],
 			d2: want.groups[1],
