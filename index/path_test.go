@@ -279,22 +279,32 @@ func TestUniqueDirs(t *testing.T) {
 
 func TestCleanPath(t *testing.T) {
 	tests := []struct{ have, want string }{
+		// Invalid
 		{"", ""},
 		{"/", ""},
 		{`\\`, ""},
 		{"C:", ""},
+		{"/..", ""},
+		{"../.", ""},
+		{"../a", ""},
 		{"a/../c:", ""},
 		{"a/../..", ""},
-		{"../a", ""},
+
+		// Non-clean
 		{"./", "."},
+		{"a/.", "a/"},
 		{"./a/", "a/"},
+		{"./a/.b", "a/.b"},
+		{"./a/b.", "a/b."},
+		{"a/./b//..", "a/"},
+		{"a/./b/c..", "a/b/c.."},
 	}
 	for _, tc := range tests {
 		assert.Equal(t, tc.want, cleanPath(tc.have), "%q", tc)
 	}
 
 	// Do not reallocate clean paths
-	for _, tc := range []string{".", "a", "a/", "a/b", "a/b/"} {
+	for _, tc := range []string{".", "a", "..a", "a..", "a/", "a/b", "a/b/"} {
 		if p := cleanPath(tc); assert.Equal(t, tc, p) {
 			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(p))
 		}

@@ -261,24 +261,41 @@ func (u *uniqueDirs) forEach(fn func(path)) {
 }
 
 // cleanPath returns a clean, slash-separated representation of p. It returns ""
-// if p is invalid. The trailing separator, if present, is preserved.
+// if p is invalid. If p is a directory, the returned path will be either "." or
+// end with a '/'.
 func cleanPath(p string) string {
 	// VolumeName != "" is a superset of filepath.IsAbs test on Windows
 	if p == "" || filepath.VolumeName(p) != "" {
 		return ""
 	}
+
 	// path.Clean is more efficient than filepath.Clean and we want to return ""
 	// for cases handled by filepath.postClean.
 	p = filepath.ToSlash(p)
 	c := stdpath.Clean(p)
-	if stdpath.IsAbs(c) || (len(c) >= 2 && (c[1] == ':' || c[:2] == "..")) {
+	if (len(c) > 3 && c[:3] == "../") ||
+		(len(c) > 1 && (c[1] == ':' || c == "..")) ||
+		len(c) == 0 || c[0] == '/' {
 		return ""
 	}
-	// Preserve the trailing '/' and pointer values, if possible
-	if p[len(p)-1] == '/' && c != "." {
+
+	// Preserve directory status
+	switch p[len(p)-1] {
+	case '/':
+		if c == "." {
+			return "."
+		}
 		if len(p) == len(c)+1 && p[:len(c)] == c {
-			c = p
+			c = p // Avoid allocation
 		} else {
+			c += "/"
+		}
+	case '.':
+		if c == "." {
+			return "."
+		}
+		if (len(p) > 3 && p[len(p)-3:] == "/..") ||
+			(len(p) > 1 && p[len(p)-2] == '/') {
 			c += "/"
 		}
 	}
