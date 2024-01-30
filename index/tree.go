@@ -127,7 +127,7 @@ func (t *Tree) mark(name string, flag Flag) error {
 	if flag == 0 || flag&^flagKeep != 0 {
 		panic("index: invalid flag")
 	}
-	dir, file := anyPath(name)
+	dir, file := eitherPath(name)
 	if d := t.dirs[dir]; d != nil {
 		var dirs dirStack
 		for dirs.from(d); len(dirs) > 0; {
@@ -253,6 +253,9 @@ func (t *Tree) addFile(f *File) {
 
 // file returns the specified file, if it exists.
 func (t *Tree) file(p path) *File {
+	if p == "" {
+		return nil
+	}
 	d := t.dirs[p.dir()]
 	if d == nil || p.isDir() {
 		return nil

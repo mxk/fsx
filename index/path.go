@@ -1,15 +1,17 @@
 package index
 
 import (
-	"cmp"
 	"fmt"
 	stdpath "path"
 	"path/filepath"
 	"strings"
 )
 
+// emptyPath is a panic message used when a path is empty.
+const emptyPath = "index: empty path"
+
 // path is an unrooted, clean, slash-separated path. An empty path is invalid.
-// Except for the special "." root, a directory path always ends with a '/'.
+// Except for the root ("."), a directory path always ends with a '/'.
 type path string
 
 // dirPath creates a directory path. It panics if the path is invalid.
@@ -25,7 +27,7 @@ func dirPath(p string) path {
 
 // filePath creates a file path. It panics if the path is invalid.
 func filePath(p string) path {
-	if c := cleanPath(p); c.isFile() {
+	if c := path(cleanPath(p)); c.isFile() {
 		return c
 	}
 	panic(fmt.Sprint("index: invalid or non-file path: ", p))
@@ -34,22 +36,21 @@ func filePath(p string) path {
 // strictFilePath creates a file path. It panics if the path is not identical to
 // that returned by filePath.
 func strictFilePath(p string) path {
-	if path(p) == filePath(p) {
+	if p == string(filePath(p)) {
 		return path(p)
 	}
 	panic(fmt.Sprint("index: non-clean file path: ", p))
 }
 
-// anyPath returns the directory and/or file interpretations of path p,
-// depending on which one is possible.
-func anyPath(p string) (dir, file path) {
-	if c := cleanPath(p); c != "" {
-		if c == "." || c[len(c)-1] == '/' {
-			dir = c
-		} else {
-			c += "/"
-			dir, file = c, c[:len(p)-1]
-		}
+// eitherPath returns the directory and/or file path interpretation of p. If dir
+// is empty, then p is invalid. Otherwise, file may be empty if p was "." or had
+// a trailing '/'.
+func eitherPath(p string) (dir, file path) {
+	if c := path(cleanPath(p)); c.isDir() {
+		dir = c
+	} else if c != "" {
+		c += "/"
+		dir, file = c, c[:len(p)-1]
 	}
 	return
 }
@@ -64,45 +65,48 @@ func (p path) contains(other path) bool {
 		other[:len(p)] == p && p[len(p)-1] == '/')
 }
 
-// Dir returns the parent directory of p.
+// dir returns the parent directory of p. It panics if p is empty.
 func (p path) dir() path {
-	i := strings.LastIndexByte(string(p[:len(p)-1]), '/')
-	if i > 0 {
+	if p == "" {
+		panic(emptyPath)
+	}
+	if i := strings.LastIndexByte(string(p[:len(p)-1]), '/'); i > 0 {
 		return p[:i+1]
 	}
-	if i < 0 {
-		if p == "" {
-			return ""
-		}
-		return "."
-	}
-	panic(fmt.Sprint("index: rooted path: ", p))
+	return "."
 }
 
-// base returns the last element of p.
+// base returns the last element of p. It panics if p is empty.
 func (p path) base() string {
 	if p == "" {
-		return ""
+		panic(emptyPath)
 	}
-	return stdpath.Base(string(p))
+	if p[len(p)-1] == '/' {
+		p = p[:len(p)-1]
+	}
+	if i := strings.LastIndexByte(string(p), '/'); i > 0 {
+		return string(p[i+1:])
+	}
+	return string(p)
 }
 
-// commonRoot returns the path that is a parent of both p and other.
+// commonRoot returns the directory path that is a parent of both p and other.
 func (p path) commonRoot(other path) path {
 	a, b := string(p), string(other)
 	for {
 		i := strings.IndexByte(a, '/')
-		if i < 0 || i != strings.IndexByte(b, '/') || a[:i] != b[:i] {
-			if s := p[:len(p)-len(a)]; s != "" {
-				return s
-			}
-			if p != "" && other != "" {
-				return "."
-			}
-			panic("index: invalid path")
+		if i < 0 || len(b) < i+1 || a[:i+1] != b[:i+1] {
+			break
 		}
 		a, b = a[i+1:], b[i+1:]
 	}
+	if r := p[:len(p)-len(a)]; r != "" {
+		return r
+	}
+	if p != "" && other != "" {
+		return "."
+	}
+	panic(emptyPath)
 }
 
 // dist returns the distance between two paths in terms of directories traversed
@@ -125,8 +129,8 @@ func (p path) isFile() bool {
 }
 
 // cmp returns -1 if p < other, 0 if p == other, and +1 if p > other.
-// Directories are considered less than files. It panics if either path is empty
-// or if the same name refers to both a file and a directory.
+// Directories are less than files. It panics if either path is empty or if the
+// same name refers to both a file and a directory.
 func (p path) cmp(other path) int {
 	lessIf := func(b bool) int {
 		if b {
@@ -135,30 +139,36 @@ func (p path) cmp(other path) int {
 		return +1
 	}
 	a, b := string(p), string(other)
-	if a == "." || b == "." {
-		if a == b {
-			return 0
-		}
+
+	// Handle empty paths and root, which is less than all non-root paths
+	if len(a) <= 1 || len(b) <= 1 {
 		if a == "" || b == "" {
-			panic("index: empty path")
+			panic(emptyPath)
 		}
-		return lessIf(a == ".") // Root is less than all other paths
+		if a == "." || b == "." {
+			if a == b {
+				return 0
+			}
+			return lessIf(a == ".")
+		}
 	}
+
 	// Find the first byte mismatch
 	for i := 0; i < len(a) && i < len(b); i++ {
 		if a[i] != b[i] {
+			// Path separator is less than any other byte
+			if aSep := a[i] == '/'; aSep || b[i] == '/' {
+				return lessIf(aSep)
+			}
 			// Directory is less than a file
-			aDir := strings.IndexByte(a[i:], '/') >= 0
-			if aDir != (strings.IndexByte(b[i:], '/') >= 0) {
+			aDir := strings.IndexByte(a[i+1:], '/') >= 0
+			if aDir != (strings.IndexByte(b[i+1:], '/') >= 0) {
 				return lessIf(aDir)
 			}
-			// Path separator is less than any other byte
-			if a[i] != '/' && b[i] != '/' {
-				return cmp.Compare(a[i], b[i])
-			}
-			return lessIf(a[i] == '/')
+			return lessIf(a[i] < b[i])
 		}
 	}
+
 	// One of the paths is a prefix of the other. If needed, swap the paths so
 	// that a is a prefix of b to simplify the remaining logic.
 	invert := false
@@ -169,6 +179,7 @@ func (p path) cmp(other path) int {
 		a, b = b, a
 		invert = true
 	}
+
 	// a is a prefix of b and the next byte in b cannot be a '/' since the same
 	// name cannot be both a file and a directory. We require directories to end
 	// with a '/' to ensure consistent ordering when sorting ["b/", "b/c", "a"].
@@ -178,9 +189,7 @@ func (p path) cmp(other path) int {
 	if bSep == 0 {
 		panic(fmt.Sprint("index: directory without separator suffix: ", a))
 	}
-	if a == "" {
-		panic("index: empty path")
-	}
+
 	// If a ends with '/', then it's a parent of b. If b does not have any more
 	// separators, then a and b are regular files in the same directory and a is
 	// shorter. Otherwise, a is a file and b is a directory.
@@ -247,7 +256,7 @@ func (u *uniqueDirs) forEach(fn func(path)) {
 
 // cleanPath returns a clean, slash-separated representation of p. It returns ""
 // if p is invalid. The trailing separator, if present, is preserved.
-func cleanPath(p string) path {
+func cleanPath(p string) string {
 	// VolumeName != "" is a superset of filepath.IsAbs test on Windows
 	if p == "" || filepath.VolumeName(p) != "" {
 		return ""
@@ -267,5 +276,5 @@ func cleanPath(p string) path {
 			c += "/"
 		}
 	}
-	return path(c)
+	return c
 }

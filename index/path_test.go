@@ -65,17 +65,23 @@ func TestPathDirBase(t *testing.T) {
 		assert.Equal(t, tc.dir, tc.p.dir(), "%q", tc)
 		assert.Equal(t, tc.base, tc.p.base(), "%q", tc)
 	}
-	assert.Panics(t, func() { path("/a").dir() })
+	assert.PanicsWithValue(t, emptyPath, func() { path("").dir() })
+	assert.PanicsWithValue(t, emptyPath, func() { path("").base() })
 }
 
 func TestPathCommonRoot(t *testing.T) {
 	tests := []struct{ a, b, root path }{
 		{".", ".", "."},
+		{"a", ".", "."},
+		{"a", "a", "."},
+		{"a", "b", "."},
 		{"a/", ".", "."},
+		{"a/", "a", "."},
 		{"a/", "a/", "a/"},
 		{"a/b", "a/", "a/"},
 		{"a/b", "a/c", "a/"},
 		{"a/b/", "a/", "a/"},
+		{"a/", "b", "."},
 		{"a/", "b/", "."},
 		{"a/b/", "a/c/", "a/"},
 		{"a/b/", "b/c/", "."},
@@ -86,8 +92,8 @@ func TestPathCommonRoot(t *testing.T) {
 		assert.Equal(t, tc.root, tc.a.commonRoot(tc.b), "%q", tc)
 		assert.Equal(t, tc.root, tc.b.commonRoot(tc.a), "%q", tc)
 	}
-	assert.Panics(t, func() { path("").commonRoot("") })
-	assert.Panics(t, func() { path("").commonRoot(".") })
+	assert.PanicsWithValue(t, emptyPath, func() { path("").commonRoot("") })
+	assert.PanicsWithValue(t, emptyPath, func() { path("").commonRoot(".") })
 }
 
 func TestPathDist(t *testing.T) {
@@ -153,6 +159,7 @@ func TestPathCmp(t *testing.T) {
 		assert.Equal(t, 1, tc.b.cmp(tc.a), "%q", tc)
 	}
 	panics := []struct{ a, b path }{
+		{"", ""},
 		{"", "."},
 		{"", "a"},
 		{"a/", "a"},
@@ -269,10 +276,7 @@ func TestUniqueDirs(t *testing.T) {
 }
 
 func TestCleanPath(t *testing.T) {
-	tests := []struct {
-		have string
-		want path
-	}{
+	tests := []struct{ have, want string }{
 		{"", ""},
 		{"/", ""},
 		{`\\`, ""},
@@ -289,8 +293,8 @@ func TestCleanPath(t *testing.T) {
 
 	// Do not reallocate clean paths
 	for _, tc := range []string{".", "a", "a/", "a/b", "a/b/"} {
-		if p := cleanPath(tc); assert.Equal(t, tc, string(p)) {
-			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(string(p)))
+		if p := cleanPath(tc); assert.Equal(t, tc, p) {
+			assert.Same(t, unsafe.StringData(tc), unsafe.StringData(p))
 		}
 	}
 }
