@@ -27,7 +27,7 @@ func (cmd *dupCmd) Main(args []string) error {
 	t := x.ToTree()
 	dups := t.Dups(".", 0, 10)
 	for _, dup := range dups {
-		fmt.Println(dup.Dir)
+		fmt.Println(dup)
 		for _, alt := range dup.Alt {
 			fmt.Printf("\t%s\n", alt)
 		}

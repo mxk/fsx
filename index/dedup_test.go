@@ -28,11 +28,11 @@ func TestDedup(t *testing.T) {
 		"X/Z/d1":     {Data: []byte("d")},
 		"X/Z/f0":     {Data: []byte("f")},
 	})
-	require.True(t, dd.isDup(tr, tr.Dir("A"), 0))
-	require.True(t, dd.isDup(tr, tr.Dir("A/B"), 0))
-	require.True(t, dd.isDup(tr, tr.Dir("A/B/C"), 0))
-	require.True(t, dd.isDup(tr, tr.Dir("A/B/C/D"), 0))
-	require.False(t, dd.isDup(tr, tr.Dir("X"), 1))
-	require.False(t, dd.isDup(tr, tr.Dir("X/Y"), 0))
-	require.True(t, dd.isDup(tr, tr.Dir("X/Z"), 1))
+	require.True(t, dd.isDup(tr, "A/", 0))
+	require.True(t, dd.isDup(tr, "A/B/", 0))
+	require.True(t, dd.isDup(tr, "A/B/C/", 0))
+	require.True(t, dd.isDup(tr, "A/B/C/D/", 0))
+	require.False(t, dd.isDup(tr, "X/", 1))
+	require.False(t, dd.isDup(tr, "X/Y/", 0))
+	require.True(t, dd.isDup(tr, "X/Z/", 1))
 }

@@ -7,16 +7,16 @@ import (
 
 // Dup is a directory that can be deleted without losing too much data.
 type Dup struct {
-	*Dir
-	Alt     Dirs  // Directories that contain copies of unique files in Dir
-	Lost    Files // Unique files that would be lost if Dir is deleted
-	Ignored Files // Unimportant files that may be lost if Dir is deleted
+	*dir
+	Alt     dirs  // Directories that contain copies of unique files
+	Lost    Files // Unique files that would be lost if this directory is deleted
+	Ignored Files // Unimportant files that may be lost if this directory is deleted
 }
 
 // dedup maintains directory deduplication state to minimize allocations.
 type dedup struct {
 	tree *Tree
-	root *Dir
+	root *dir
 
 	subtree dirStack
 	ignored Files
@@ -27,14 +27,15 @@ type dedup struct {
 	safeCount  map[path]int
 }
 
-// isDup returns whether root can be deduplicated. This is a relatively fast
-// operation that simply ensures that every unique file under root, except those
-// that can be ignored, has at least one copy outside of root that is not marked
-// for possible removal. maxLost is the maximum number of unique files that can
-// be lost for a directory to still be considered a duplicate.
-func (dd *dedup) isDup(tree *Tree, root *Dir, maxLost int) bool {
+// isDup returns whether directory p can be deduplicated. This is a relatively
+// fast operation that simply ensures that every unique file under p, except
+// those that can be ignored, has at least one copy outside of p that is not
+// marked for possible removal. maxLost is the maximum number of unique files
+// that can be lost for the directory to still be considered a duplicate.
+func (dd *dedup) isDup(tree *Tree, p path, maxLost int) bool {
 	dd.tree, dd.root = nil, nil
-	if root.atom != nil && root.atom != root {
+	root := tree.dirs[p]
+	if root == nil || root.atom != nil && root.atom != root {
 		return false
 	}
 	if dd.safe == nil {
@@ -92,7 +93,7 @@ func (dd *dedup) dedup() *Dup {
 	}
 
 	// Record ignored and lost files
-	dup := &Dup{Dir: dd.root}
+	dup := &Dup{dir: dd.root}
 	if len(dd.ignored) > 0 {
 		dup.Ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
 		dup.Ignored.Sort()
@@ -134,7 +135,7 @@ func (dd *dedup) dedup() *Dup {
 		}
 
 		// Find the next best alternate
-		maxScore, bestAlt := math.Inf(-1), (*Dir)(nil)
+		maxScore, bestAlt := math.Inf(-1), (*dir)(nil)
 		for p, n := range dd.safeCount {
 			d := dd.tree.dirs[p]
 			s := dd.root.altScore(d, n, len(dd.safe))
@@ -173,7 +174,7 @@ func (dd *dedup) dedup() *Dup {
 //
 // If d contains only unique files, an exact copy of it located in the same
 // parent directory receives a score of 1.
-func (d *Dir) altScore(alt *Dir, safe, rem int) float64 {
+func (d *dir) altScore(alt *dir, safe, rem int) float64 {
 	if !(0 < safe && safe <= alt.uniqueFiles) ||
 		!(safe <= rem && rem <= d.uniqueFiles) {
 		panic("index: invalid file counts") // Shouldn't happen

@@ -90,22 +90,22 @@ func TestScan(t *testing.T) {
 	require.Equal(t, want, x)
 
 	// Verify Tree structure
-	X := &Dir{
+	X := &dir{
 		path:        "X/",
 		files:       Files{x.groups[1][0]},
 		totalFiles:  1,
 		uniqueFiles: 1,
 	}
-	R := &Dir{
+	R := &dir{
 		path:        ".",
-		dirs:        Dirs{X},
+		dirs:        dirs{X},
 		files:       Files{x.groups[2][0], x.groups[0][1]},
 		totalDirs:   1,
 		totalFiles:  3,
 		uniqueFiles: 3,
 	}
 	wantTree := &Tree{
-		dirs: map[path]*Dir{R.path: R, X.path: X},
+		dirs: map[path]*dir{R.path: R, X.path: X},
 		idx: map[Digest]Files{
 			d1: want.groups[0],
 			d2: want.groups[1],

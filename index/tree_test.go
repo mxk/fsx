@@ -28,30 +28,30 @@ func TestToTree(t *testing.T) {
 		groups: []Files{{a1, a2, a3}, {b1, b2}, {c1, c2}, {x1}, {y1, yX}},
 	}
 
-	Z := &Dir{
+	Z := &dir{
 		path:        "C/.git/X/.git/Z/",
 		files:       Files{y1},
 		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
-	GIT2 := &Dir{
+	GIT2 := &dir{
 		path:        "C/.git/X/.git/",
-		dirs:        Dirs{Z},
+		dirs:        dirs{Z},
 		totalDirs:   1,
 		totalFiles:  1,
 		uniqueFiles: 1, // y1
 	}
-	X := &Dir{
+	X := &dir{
 		path:        "C/.git/X/",
-		dirs:        Dirs{GIT2},
+		dirs:        dirs{GIT2},
 		files:       Files{x1},
 		totalDirs:   2,
 		totalFiles:  2,
 		uniqueFiles: 2, // x1, y1
 	}
-	GIT1 := &Dir{
+	GIT1 := &dir{
 		path:        "C/.git/",
-		dirs:        Dirs{X},
+		dirs:        dirs{X},
 		totalDirs:   3,
 		totalFiles:  2,
 		uniqueFiles: 2, // x1, y1
@@ -61,50 +61,50 @@ func TestToTree(t *testing.T) {
 	GIT2.atom = GIT1
 	Z.atom = GIT1
 
-	F := &Dir{
+	F := &dir{
 		path:        "C/F/",
 		files:       Files{c2},
 		totalFiles:  1,
 		uniqueFiles: 1, // c2
 	}
-	E := &Dir{
+	E := &dir{
 		path:        "C/D/E/",
 		files:       Files{b2},
 		totalFiles:  1,
 		uniqueFiles: 1, // b2
 	}
-	D := &Dir{
+	D := &dir{
 		path:        "C/D/",
-		dirs:        Dirs{E},
+		dirs:        dirs{E},
 		totalDirs:   1,
 		totalFiles:  1,
 		uniqueFiles: 1, // b2,
 	}
-	C := &Dir{
+	C := &dir{
 		path:        "C/",
-		dirs:        Dirs{GIT1, D, F},
+		dirs:        dirs{GIT1, D, F},
 		files:       Files{c1},
 		totalDirs:   7,
 		totalFiles:  5,
 		uniqueFiles: 4, // b2, c[12], x1, y1
 	}
-	B := &Dir{
+	B := &dir{
 		path:        "A/B/",
 		files:       Files{a3},
 		totalFiles:  1,
 		uniqueFiles: 1, // a3
 	}
-	A := &Dir{
+	A := &dir{
 		path:        "A/",
-		dirs:        Dirs{B},
+		dirs:        dirs{B},
 		files:       Files{a2, b1},
 		totalDirs:   1,
 		totalFiles:  3,
 		uniqueFiles: 2, // a[23], b1
 	}
-	R := &Dir{
+	R := &dir{
 		path:        ".",
-		dirs:        Dirs{A, C},
+		dirs:        dirs{A, C},
 		files:       Files{a1},
 		totalDirs:   10,
 		totalFiles:  9,
@@ -113,7 +113,7 @@ func TestToTree(t *testing.T) {
 
 	want := &Tree{
 		root: x.root,
-		dirs: map[path]*Dir{
+		dirs: map[path]*dir{
 			R.path:    R,
 			A.path:    A,
 			B.path:    B,
@@ -142,7 +142,7 @@ func TestToTree(t *testing.T) {
 }
 
 func TestEmptyTree(t *testing.T) {
-	want := &Tree{root: "/", dirs: map[path]*Dir{".": {path: "."}}}
+	want := &Tree{root: "/", dirs: map[path]*dir{".": {path: "."}}}
 	require.Equal(t, want, (&Index{root: "/"}).ToTree())
 	require.Equal(t, &Index{root: "/"}, want.ToIndex())
 
@@ -173,12 +173,12 @@ func TestDups(t *testing.T) {
 	x := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
 	tr := x.ToTree()
 	want := []*Dup{{
-		Dir:  tr.dirs["A/"],
-		Alt:  Dirs{tr.dirs["B/"]},
+		dir:  tr.dirs["A/"],
+		Alt:  dirs{tr.dirs["B/"]},
 		Lost: Files{c0},
 	}, {
-		Dir: tr.dirs["B/"],
-		Alt: Dirs{tr.dirs["A/"]},
+		dir: tr.dirs["B/"],
+		Alt: dirs{tr.dirs["A/"]},
 	}}
 	require.Equal(t, want, tr.Dups(".", -1, 1))
 
@@ -195,7 +195,7 @@ func TestDups(t *testing.T) {
 func TestDirStack(t *testing.T) {
 	var s dirStack
 	assert.Nil(t, s.next())
-	d1, d2, d3, d4 := new(Dir), new(Dir), new(Dir), new(Dir)
+	d1, d2, d3, d4 := new(dir), new(dir), new(dir), new(dir)
 
 	s.from(d1)
 	assert.Equal(t, d1, s.next())

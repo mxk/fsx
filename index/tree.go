@@ -12,23 +12,23 @@ import (
 // Tree is a directory tree representation of the index.
 type Tree struct {
 	root string
-	dirs map[path]*Dir
+	dirs map[path]*dir
 	idx  map[Digest]Files
 }
 
 // ToTree converts from an index to a tree representation.
 func (x *Index) ToTree() *Tree {
 	if len(x.groups) == 0 {
-		return &Tree{root: x.root, dirs: map[path]*Dir{".": {path: "."}}}
+		return &Tree{root: x.root, dirs: map[path]*dir{".": {path: "."}}}
 	}
 	t := &Tree{
 		root: x.root,
-		dirs: make(map[path]*Dir, len(x.groups)/8),
+		dirs: make(map[path]*dir, len(x.groups)/8),
 		idx:  make(map[Digest]Files, len(x.groups)),
 	}
-	t.dirs["."] = &Dir{path: "."}
+	t.dirs["."] = &dir{path: "."}
 
-	// Add each file to the tree, creating all required Dir entries and updating
+	// Add each file to the tree, creating all required dir entries and updating
 	// unique file counts.
 	var dirs uniqueDirs
 	for _, g := range x.groups {
@@ -46,14 +46,14 @@ func (x *Index) ToTree() *Tree {
 	}
 
 	// Sort directories and files, and find atomic directories
-	sort := make(chan *Dir, min(runtime.NumCPU(), 8))
+	sort := make(chan *dir, min(runtime.NumCPU(), 8))
 	var wg sync.WaitGroup
 	wg.Add(cap(sort))
 	for n := cap(sort); n > 0; n-- {
-		go func(sort <-chan *Dir) {
+		go func(sort <-chan *dir) {
 			defer wg.Done()
 			for d := range sort {
-				slices.SortFunc(d.dirs, func(a, b *Dir) int {
+				slices.SortFunc(d.dirs, func(a, b *dir) int {
 					if c := cmp.Compare(a.base(), b.base()); c != 0 {
 						return c
 					}
@@ -97,9 +97,6 @@ func (t *Tree) ToIndex() *Index {
 	all.Sort()
 	return New(t.root, all)
 }
-
-// Dir returns the specified directory or nil if it does not exist.
-func (t *Tree) Dir(name string) *Dir { return t.dirs[dirPath(name)] }
 
 // File returns the specified file or nil if it does not exist.
 func (t *Tree) File(name string) *File { return t.file(filePath(name)) }
@@ -148,8 +145,8 @@ func (t *Tree) mark(name string, flag Flag) error {
 // > 0, at most that many directories are returned. maxLost is the maximum
 // number of unique files that can be lost for a directory to still be
 // considered a duplicate.
-func (t *Tree) Dups(dir string, maxDups, maxLost int) []*Dup {
-	root := t.dirs[dirPath(dir)]
+func (t *Tree) Dups(dirName string, maxDups, maxLost int) []*Dup {
+	root := t.dir(dirName)
 	if root == nil || len(root.dirs) == 0 {
 		return nil
 	}
@@ -157,24 +154,24 @@ func (t *Tree) Dups(dir string, maxDups, maxLost int) []*Dup {
 	q.from(root.dirs...)
 
 	// Directories are sent to workers via next. Duplicates are returned via
-	// dup. Subdirectories of non-duplicates are returned via dirs.
-	next := make(chan *Dir, runtime.NumCPU())
+	// dup. Subdirectories of non-duplicates are returned via todo.
+	next := make(chan *dir, runtime.NumCPU())
 	dup := make(chan *Dup, 1)
-	dirs := make(chan Dirs, 1)
+	todo := make(chan dirs, 1)
 	var wg sync.WaitGroup
 	wg.Add(len(q))
 	for n := cap(next); n > 0; n-- {
-		go func(next <-chan *Dir, dup chan<- *Dup, dirs chan<- Dirs) {
+		go func(next <-chan *dir, dup chan<- *Dup, todo chan<- dirs) {
 			defer wg.Done()
 			var dd dedup
 			for root := range next {
-				if dd.isDup(t, root, maxLost) {
+				if dd.isDup(t, root.path, maxLost) {
 					dup <- dd.dedup()
 				} else {
-					dirs <- root.dirs
+					todo <- root.dirs
 				}
 			}
-		}(next, dup, dirs)
+		}(next, dup, todo)
 	}
 	go func() {
 		wg.Wait() // Wait for all directories to be processed
@@ -221,7 +218,7 @@ func (t *Tree) Dups(dir string, maxDups, maxLost int) []*Dup {
 				}
 				wg.Add(-n)
 			}
-		case d := <-dirs:
+		case d := <-todo:
 			if len(d) > 0 && q != nil {
 				wg.Add(len(d))
 				q.push(d)
@@ -238,7 +235,7 @@ func (t *Tree) addFile(f *File) {
 		d.files = append(d.files, f)
 		return
 	}
-	d := &Dir{path: name, files: Files{f}}
+	d := &dir{path: name, files: Files{f}}
 	t.dirs[name] = d
 	for name != "." {
 		name = d.dir()
@@ -246,10 +243,13 @@ func (t *Tree) addFile(f *File) {
 			p.dirs = append(p.dirs, d)
 			break
 		}
-		d = &Dir{path: name, dirs: Dirs{d}}
+		d = &dir{path: name, dirs: dirs{d}}
 		t.dirs[name] = d
 	}
 }
+
+// dir returns the specified directory or nil if it does not exist.
+func (t *Tree) dir(name string) *dir { return t.dirs[dirPath(name)] }
 
 // file returns the specified file, if it exists.
 func (t *Tree) file(p path) *File {
@@ -271,10 +271,10 @@ func (t *Tree) file(p path) *File {
 }
 
 // dirStack is a stack of directories that are visited in depth-first order.
-type dirStack Dirs
+type dirStack dirs
 
 // from initializes the stack with the specified directories.
-func (s *dirStack) from(ds ...*Dir) {
+func (s *dirStack) from(ds ...*dir) {
 	if *s = (*s)[:0]; cap(*s) < len(ds) {
 		*s = make(dirStack, 0, max(2*len(ds), 16))
 	}
@@ -282,19 +282,19 @@ func (s *dirStack) from(ds ...*Dir) {
 }
 
 // push pushes ds in reverse order to the stack.
-func (s *dirStack) push(ds Dirs) {
+func (s *dirStack) push(ds dirs) {
 	if len(ds) <= 1 {
 		*s = append(*s, ds...)
 		return
 	}
-	*s = append(*s, make(Dirs, len(ds))...)
+	*s = append(*s, make(dirs, len(ds))...)
 	for i, j := len(*s)-len(ds), len(ds)-1; j >= 0; i, j = i+1, j-1 {
 		(*s)[i] = ds[j]
 	}
 }
 
 // next returns the next directory and adds its children to the stack.
-func (s *dirStack) next() (d *Dir) {
+func (s *dirStack) next() (d *dir) {
 	if i := len(*s) - 1; i >= 0 {
 		d, *s = (*s)[i], (*s)[:i]
 		s.push(d.dirs)

@@ -48,17 +48,17 @@ func (f *File) canIgnore() bool {
 }
 
 // existsIn returns whether f exists in d.
-func (f *File) existsIn(d *Dir) bool {
+func (f *File) existsIn(d *dir) bool {
 	return !f.flag.IsGone() && d.path.contains(f.path)
 }
 
 // isSafeIn returns whether f is a safe file in d.
-func (f *File) isSafeIn(d *Dir) bool {
+func (f *File) isSafeIn(d *dir) bool {
 	return f.flag.IsSafe() && d.path.contains(f.path)
 }
 
 // isSafeOutsideOf returns whether f is a safe file outside d.
-func (f *File) isSafeOutsideOf(d *Dir) bool {
+func (f *File) isSafeOutsideOf(d *dir) bool {
 	return f.flag.IsSafe() && !d.path.contains(f.path)
 }
 
@@ -85,23 +85,23 @@ type Files []*File
 // Sort sorts files by path and other attributes.
 func (fs Files) Sort() { slices.SortFunc(fs, (*File).cmp) }
 
-// Dir is a directory in the file system.
-type Dir struct {
+// dir is a directory in the file system.
+type dir struct {
 	path
-	dirs        Dirs  // Subdirectories
+	dirs        dirs  // Subdirectories
 	files       Files // Files in this directory
-	atom        *Dir  // Atomic container directory, such as .git
+	atom        *dir  // Atomic container directory, such as .git
 	totalDirs   int   // Total number of direct and indirect directories
 	totalFiles  int   // Total number of direct and indirect files
 	uniqueFiles int   // Total number of direct and indirect unique files
 }
 
 // cmp returns -1 if d < other, 0 if d == other, and +1 if d > other.
-func (d *Dir) cmp(other *Dir) int { return d.path.cmp(other.path) }
+func (d *dir) cmp(other *dir) int { return d.path.cmp(other.path) }
 
 // updateCounts updates total directory and file counts. It assumes that no
 // files in the tree are marked as gone.
-func (d *Dir) updateCounts() {
+func (d *dir) updateCounts() {
 	d.totalDirs = len(d.dirs)
 	d.totalFiles = len(d.files)
 	for _, c := range d.dirs {
@@ -114,8 +114,8 @@ func (d *Dir) updateCounts() {
 	}
 }
 
-// Dirs is an ordered list of directories.
-type Dirs []*Dir
+// dirs is an ordered list of directories.
+type dirs []*dir
 
 // Sort sorts files by path and other attributes.
-func (ds Dirs) Sort() { slices.SortFunc(ds, (*Dir).cmp) }
+func (ds dirs) Sort() { slices.SortFunc(ds, (*dir).cmp) }
