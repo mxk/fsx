@@ -3,14 +3,63 @@ package index
 import (
 	"fmt"
 	"math"
+	"slices"
 )
 
 // Dup is a directory that can be deleted without losing too much data.
 type Dup struct {
 	*dir
-	Alt     dirs  // Directories that contain copies of unique files
-	Lost    Files // Unique files that would be lost if this directory is deleted
-	Ignored Files // Unimportant files that may be lost if this directory is deleted
+	tree *Tree
+
+	alts    []string // Directories that contain copies of unique files
+	lost    Files    // Unique files that would be lost if this directory is deleted
+	ignored Files    // Unimportant files that may be lost if this directory is deleted
+
+	safe map[Digest]*dir // Safe digests in dir and the alternate directory for each one
+}
+
+// Alts returns alternate directories that contain duplicate content.
+func (u *Dup) Alts() []string { return u.alts }
+
+// Lost returns unique files that would be lost if d is deleted.
+func (u *Dup) Lost() Files { return u.lost }
+
+// Ignored returns empty and other ignored files that may be lost if d is
+// deleted.
+func (u *Dup) Ignored() Files { return u.ignored }
+
+// FileMap returns a map of files in u that have copies outside u. If alt is
+// specified, only files that have copies in alt are returned.
+func (u *Dup) FileMap(alt string) map[*File]*File {
+	var altd *dir
+	if alt != "" {
+		if altd = u.tree.dir(alt); altd == nil {
+			return nil
+		}
+	}
+	m := make(map[*File]*File)
+	for g, d := range u.safe {
+		if altd != nil && d != altd {
+			continue
+		}
+		var safe *File
+		group := u.tree.idx[g]
+		for _, f := range group {
+			if f.isSafeIn(d) {
+				safe = f
+				break
+			}
+		}
+		if safe == nil {
+			panic(fmt.Sprintf("index: no safe files for %X in %s", g, d))
+		}
+		for _, f := range group {
+			if f.existsIn(u.dir) {
+				m[f] = safe
+			}
+		}
+	}
+	return m
 }
 
 // dedup maintains directory deduplication state to minimize allocations.
@@ -29,9 +78,9 @@ type dedup struct {
 
 // isDup returns whether directory p can be deduplicated. This is a relatively
 // fast operation that simply ensures that every unique file under p, except
-// those that can be ignored, has at least one copy outside of p that is not
-// marked for possible removal. maxLost is the maximum number of unique files
-// that can be lost for the directory to still be considered a duplicate.
+// those that can be ignored, has at least one copy outside p that is not marked
+// for possible removal. maxLost is the maximum number of unique files that can
+// be lost for the directory to still be considered a duplicate.
 func (dd *dedup) isDup(tree *Tree, p path, maxLost int) bool {
 	dd.tree, dd.root = nil, nil
 	root := tree.dirs[p]
@@ -93,21 +142,25 @@ func (dd *dedup) dedup() *Dup {
 	}
 
 	// Record ignored and lost files
-	dup := &Dup{dir: dd.root}
+	u := &Dup{
+		dir:  dd.root,
+		tree: dd.tree,
+		safe: make(map[Digest]*dir, len(dd.safe)),
+	}
 	if len(dd.ignored) > 0 {
-		dup.Ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
-		dup.Ignored.Sort()
+		u.ignored = append(make(Files, 0, len(dd.ignored)), dd.ignored...)
+		u.ignored.Sort()
 	}
 	if len(dd.lost) > 0 {
-		dup.Lost = make(Files, 0, len(dd.lost))
+		u.lost = make(Files, 0, len(dd.lost))
 		for g := range dd.lost {
 			for _, f := range dd.tree.idx[g] {
 				if f.existsIn(dd.root) {
-					dup.Lost = append(dup.Lost, f)
+					u.lost = append(u.lost, f)
 				}
 			}
 		}
-		dup.Lost.Sort()
+		u.lost.Sort()
 	}
 
 	// Select alternate directories until all safe files are accounted for
@@ -149,15 +202,16 @@ func (dd *dedup) dedup() *Dup {
 			for _, f := range dd.tree.idx[g] {
 				if f.isSafeIn(bestAlt) {
 					delete(dd.safe, g)
+					u.safe[g] = bestAlt
 					break
 				}
 			}
 		}
-		dup.Alt = append(dup.Alt, bestAlt)
+		u.alts = append(u.alts, string(bestAlt.path))
 	}
-	dup.Alt.Sort()
+	slices.SortFunc(u.alts, func(a, b string) int { return path(a).cmp(path(b)) })
 	dd.tree, dd.root = nil, nil
-	return dup
+	return u
 }
 
 // altScore returns a quality score in the range [0,1] representing the

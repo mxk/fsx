@@ -172,13 +172,19 @@ func TestDups(t *testing.T) {
 
 	x := Index{groups: []Files{{a0, a1}, {b0, b1}, {c0, c1}}}
 	tr := x.ToTree()
+	A, B := tr.dirs["A/"], tr.dirs["B/"]
+
 	want := []*Dup{{
-		dir:  tr.dirs["A/"],
-		Alt:  dirs{tr.dirs["B/"]},
-		Lost: Files{c0},
+		dir:  A,
+		tree: tr,
+		alts: []string{string(B.path)},
+		lost: Files{c0},
+		safe: map[Digest]*dir{d1: B, d2: B},
 	}, {
-		dir: tr.dirs["B/"],
-		Alt: dirs{tr.dirs["A/"]},
+		dir:  B,
+		tree: tr,
+		alts: []string{string(A.path)},
+		safe: map[Digest]*dir{d1: A, d2: A},
 	}}
 	require.Equal(t, want, tr.Dups(".", -1, 1))
 
@@ -188,7 +194,7 @@ func TestDups(t *testing.T) {
 	a0.flag = flagNone
 	c0.flag |= flagKeep | flagGone
 	a1.flag |= flagKeep
-	want[0].Lost = nil
+	want[0].lost = nil
 	require.Equal(t, want[:1], tr.Dups(".", -1, 1))
 }
 

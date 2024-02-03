@@ -28,7 +28,7 @@ func (cmd *dupCmd) Main(args []string) error {
 	dups := t.Dups(".", 0, 10)
 	for _, dup := range dups {
 		fmt.Println(dup)
-		for _, alt := range dup.Alt {
+		for _, alt := range dup.Alts() {
 			fmt.Printf("\t%s\n", alt)
 		}
 	}
